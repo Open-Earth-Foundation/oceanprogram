@@ -18,7 +18,7 @@ There exists few financial mechanisms to protect ocean health that **scale up**.
 
 Given the specificities of ocean systems and their complexities, we need to **build adequate financial mechanisms for the protection and restoration of marine ecosystems**.
 
-To this end, we have yet to leverage the full potential of digital technologies, such as artificial intelligence, blockchain, big data and IoT to scale ocean conservation. The rise and maturity of these emerging technologies provide opportunities for existing (e.g. our partners at [Regen Network](https://www.regen.network/) and new platforms to finance and scale ocean conservation.
+To this end, we have yet to leverage the full potential of digital technologies, such as artificial intelligence, blockchain, big data and IoT to scale ocean conservation. The rise and maturity of these emerging technologies provide opportunities for existing (e.g. our partners at [Regen Network](https://www.regen.network/)) and new platforms to finance and scale ocean conservation.
 
 ### Scope of work
 
@@ -34,7 +34,7 @@ This is a budding repository. The official program launch was January 31, 2022.
 So far, we have only published example notebooks and code for ocean health monitoring.
 
 * Marine biodiversity
-- [ ] include normalized biodiversity score calculations
+    - [ ] include normalized biodiversity score calculations
 
 * Marine pollution & water quality
     * Eutrophication
