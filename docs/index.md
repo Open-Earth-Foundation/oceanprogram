@@ -29,9 +29,9 @@ To this end, we have yet to leverage the full potential of digital technologies,
 
 ## Repository
 
-This is a budding repository. The official program launch was January 31, 2022.
+Like all of our programs, all our ocean research and work is open source. We will publish as much as we can. So far, we have only published example notebooks and code for ocean health monitoring. 
 
-So far, we have only published example notebooks and code for ocean health monitoring.
+This is a budding repository: the official program launch was January 31, 2022.
 
 * Marine biodiversity
     - [ ] include normalized biodiversity score calculations
@@ -40,11 +40,10 @@ So far, we have only published example notebooks and code for ocean health monit
     * Eutrophication
         - [x] An example of calculating the eutrophication index from Copernicus data can be found here [Recreating the ICEP from Sarelli et al (2018) with CMEMS](https://open-earth-foundation.github.io/oceanprogram/oceanhealth/waterquality/Sarelli_et_al2018_Aug2017example.html)
 
-You can use the [editor on GitHub](https://github.com/Open-Earth-Foundation/oceanprogram/edit/main/docs/index.md) to maintain and preview the content for your website in Markdown files.
-
 ## Contact
 
-Questions? Comments? Concers? 
-Like all of our programs, all our ocean research and work is open source. We’re looking for passionate developers and marine ecologists to collaborate with code and knowledge to help create a global mechanism to scale ocean conservation.
+Questions? Comments? Concerns?  
+
+We’re looking for passionate developers and marine ecologists to collaborate with code and knowledge to help create a global mechanism to scale ocean conservation.
 
 Contact margaux@openearth.org if you're interested.
