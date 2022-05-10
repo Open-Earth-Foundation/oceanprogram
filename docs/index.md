@@ -1,4 +1,4 @@
-## Welcome to GitHub Pages
+## OpenEarth: Oceans
 
 You can use the [editor on GitHub](https://github.com/Open-Earth-Foundation/oceanprogram/edit/main/docs/index.md) to maintain and preview the content for your website in Markdown files.
 
