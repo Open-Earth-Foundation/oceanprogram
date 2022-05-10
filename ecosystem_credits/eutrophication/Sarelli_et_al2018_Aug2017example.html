@@ -13121,7 +13121,7 @@ div#notebook {
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h1> Recreating the ICEP from Sarelli et al (2018) </h1><h2> Introduction </h2><h3> Overview </h3><p>This notebook aims to reproduce the results in <a href="http://doi.org/10.1117/12.2326160">Sarelli et al (2018)</a>: creating an Index of Coastal Eutrophication (ICEP) using the Copernicus Marine Environment Monitoring Service (CMEMS). The authors developped an automated methodology to estimate ICEP from the environmental variables:</p>
+<h1> Recreating the ICEP from Sarelli et al (2018) with CMEMS: Step 1 - retrieving data </h1><h2> Introduction </h2><h3> Overview </h3><p>This notebook aims to reproduce the results in <a href="http://doi.org/10.1117/12.2326160">Sarelli et al (2018)</a>: creating an Index of Coastal Eutrophication (ICEP) using the Copernicus Marine Environment Monitoring Service (CMEMS). The authors developped an automated methodology to estimate ICEP from the environmental variables:</p>
 <ul>
 <li>nitrate concentrations</li>
 <li>phosphate concentrations</li>
@@ -13133,58 +13133,13 @@ div#notebook {
 <p>The Index for Coastal Eutrophication Potential (ICEP) is an indicator for the potential of riverine nutrient export to sustain new production of non-diatoms phytoplankton biomass, including Harmful Algal Blooms. It uses nitrogen (N), phosphorus (P) and silica (Si) values of riverine loadings.</p>
 <p>Another reference is “3.10 Coastal Eutrophication Potential” in Hofste et al, 2019 (World Resources Institute).</p>
 <p>Note that the Copernicus data is only available at a resolution of 1/12$^\circ$: it is too coarse to quantity most conservation efforts (unless they are at the oceanic mesoscale, which is rare). It is however a great approach to obtain a baseline ICEP for a region.</p>
-<h3> Workflow </h3><p><strong>01 Retrieving the CMEMS data</strong></p>
-<p>First we retrieved the CMEMS data: this was manually downloaded via <a href="http://myocean.marine.copernicus.eu/data?view=viewer&amp;crs=epsg%3A4326&amp;t=1648036800000&amp;z=0&amp;center=-3.77839%2C42.61418&amp;zoom=11.42&amp;layers=W3siaWQiOiJjMCIsImxheWVySWQiOiJJQklfQU5BTFlTSVNGT1JFQ0FTVF9CR0NfMDA1XzAwNC9jbWVtc19tb2RfaWJpX2JnY19hbmZjXzAuMDI3ZGVnLTNEX1AxRC1tL2NobCIsInpJbmRleCI6MTAwLCJsb2dTY2FsZSI6dHJ1ZSwiaXNIaWRkZW4iOnRydWV9LHsiaWQiOiJjMSIsImxheWVySWQiOiJJQklfQU5BTFlTSVNGT1JFQ0FTVF9CR0NfMDA1XzAwNC9jbWVtc19tb2RfaWJpX2JnY19hbmZjXzAuMDI3ZGVnLTNEX1AxRC1tL25vMyIsInpJbmRleCI6MTEwLCJsb2dTY2FsZSI6dHJ1ZSwiaXNIaWRkZW4iOnRydWV9LHsiaWQiOiJjMiIsImxheWVySWQiOiJJQklfQU5BTFlTSVNGT1JFQ0FTVF9CR0NfMDA1XzAwNC9jbWVtc19tb2RfaWJpX2JnY19hbmZjXzAuMDI3ZGVnLTNEX1AxRC1tL3BvNCIsInpJbmRleCI6MTIwLCJsb2dTY2FsZSI6dHJ1ZSwiaXNIaWRkZW4iOnRydWUsImNvbG9ybWFwIjoiYW1wIn0seyJpZCI6ImMzIiwibGF5ZXJJZCI6IklCSV9BTkFMWVNJU0ZPUkVDQVNUX0JHQ18wMDVfMDA0L2NtZW1zX21vZF9pYmlfYmdjX2FuZmNfMC4wMjdkZWctM0RfUDFELW0vc2kiLCJ6SW5kZXgiOjEzMCwibG9nU2NhbGUiOnRydWUsImlzSGlkZGVuIjp0cnVlfSx7ImlkIjoiYzQiLCJsYXllcklkIjoiSUJJX0FOQUxZU0lTRk9SRUNBU1RfQkdDXzAwNV8wMDQvY21lbXNfbW9kX2liaV9iZ2NfYW5mY18wLjAyN2RlZy0zRF9QMUQtbS96ZXUiLCJ6SW5kZXgiOjE0MCwibG9nU2NhbGUiOmZhbHNlLCJpc0hpZGRlbiI6dHJ1ZSwiY29sb3JtYXAiOiJ0ZW1wbyJ9LHsiaWQiOiJjNSIsImxheWVySWQiOiJJQklfQU5BTFlTSVNGT1JFQ0FTVF9CR0NfMDA1XzAwNC9jbWVtc19tb2RfaWJpX2JnY19hbmZjXzAuMDI3ZGVnLTNEX1AxRC1tL28yIiwiekluZGV4IjoxNTAsImxvZ1NjYWxlIjpmYWxzZSwiY29sb3JtYXAiOiJ0ZW1wbyIsImlzSGlkZGVuIjp0cnVlfV0%3D&amp;objects=W3siaWQiOiJjMCIsImNycyI6ImVwc2c6NDMyNiIsImNvbXBsZXRlIjp0cnVlLCJncmFwaElkcyI6W10sInR5cGUiOiJhb2kiLCJjb29yZHMiOltbLTcuMDA1NjY1NTUxNTI0ODAwNSw1NS45ODQzMzM3NzcwNDY2NV0sWy03LjAwNTY2NTU1MTUyNDgwMDUsNDkuNTI5Nzc1NDMxOTUwNTldLFszLjU5ODI1MTcyOTcwNDQ0MjUsNDkuNTI5Nzc1NDMxOTUwNTldLFszLjU5ODI1MTcyOTcwNDQ0MjUsNTUuOTg0MzMzNzc3MDQ2NjVdXSwiaXNCYm94Ijp0cnVlfV0%3D&amp;initial=1">CMEMS My Ocean Viewer</a> using the “Atlantic-Iberian Biscay Irish- Ocean Biogeochemical Analysis and Forecast” product. 
-This is the product page:  <a href="https://resources.marine.copernicus.eu/product-detail/IBI_MULTIYEAR_BGC_005_003/INFORMATION">NON ASSIMILATIVE Hindcast - IBI_MULTIYEAR_BGC_005_003</a>.</p>
+<h3> Workflow: 01 Retrieving the CMEMS data </h3><p>First we retrieved the CMEMS data: this can be manually downloaded via <a href="http://myocean.marine.copernicus.eu/data?view=viewer&amp;crs=epsg%3A4326&amp;t=1648036800000&amp;z=0&amp;center=-3.77839%2C42.61418&amp;zoom=11.42&amp;layers=W3siaWQiOiJjMCIsImxheWVySWQiOiJJQklfQU5BTFlTSVNGT1JFQ0FTVF9CR0NfMDA1XzAwNC9jbWVtc19tb2RfaWJpX2JnY19hbmZjXzAuMDI3ZGVnLTNEX1AxRC1tL2NobCIsInpJbmRleCI6MTAwLCJsb2dTY2FsZSI6dHJ1ZSwiaXNIaWRkZW4iOnRydWV9LHsiaWQiOiJjMSIsImxheWVySWQiOiJJQklfQU5BTFlTSVNGT1JFQ0FTVF9CR0NfMDA1XzAwNC9jbWVtc19tb2RfaWJpX2JnY19hbmZjXzAuMDI3ZGVnLTNEX1AxRC1tL25vMyIsInpJbmRleCI6MTEwLCJsb2dTY2FsZSI6dHJ1ZSwiaXNIaWRkZW4iOnRydWV9LHsiaWQiOiJjMiIsImxheWVySWQiOiJJQklfQU5BTFlTSVNGT1JFQ0FTVF9CR0NfMDA1XzAwNC9jbWVtc19tb2RfaWJpX2JnY19hbmZjXzAuMDI3ZGVnLTNEX1AxRC1tL3BvNCIsInpJbmRleCI6MTIwLCJsb2dTY2FsZSI6dHJ1ZSwiaXNIaWRkZW4iOnRydWUsImNvbG9ybWFwIjoiYW1wIn0seyJpZCI6ImMzIiwibGF5ZXJJZCI6IklCSV9BTkFMWVNJU0ZPUkVDQVNUX0JHQ18wMDVfMDA0L2NtZW1zX21vZF9pYmlfYmdjX2FuZmNfMC4wMjdkZWctM0RfUDFELW0vc2kiLCJ6SW5kZXgiOjEzMCwibG9nU2NhbGUiOnRydWUsImlzSGlkZGVuIjp0cnVlfSx7ImlkIjoiYzQiLCJsYXllcklkIjoiSUJJX0FOQUxZU0lTRk9SRUNBU1RfQkdDXzAwNV8wMDQvY21lbXNfbW9kX2liaV9iZ2NfYW5mY18wLjAyN2RlZy0zRF9QMUQtbS96ZXUiLCJ6SW5kZXgiOjE0MCwibG9nU2NhbGUiOmZhbHNlLCJpc0hpZGRlbiI6dHJ1ZSwiY29sb3JtYXAiOiJ0ZW1wbyJ9LHsiaWQiOiJjNSIsImxheWVySWQiOiJJQklfQU5BTFlTSVNGT1JFQ0FTVF9CR0NfMDA1XzAwNC9jbWVtc19tb2RfaWJpX2JnY19hbmZjXzAuMDI3ZGVnLTNEX1AxRC1tL28yIiwiekluZGV4IjoxNTAsImxvZ1NjYWxlIjpmYWxzZSwiY29sb3JtYXAiOiJ0ZW1wbyIsImlzSGlkZGVuIjp0cnVlfV0%3D&amp;objects=W3siaWQiOiJjMCIsImNycyI6ImVwc2c6NDMyNiIsImNvbXBsZXRlIjp0cnVlLCJncmFwaElkcyI6W10sInR5cGUiOiJhb2kiLCJjb29yZHMiOltbLTcuMDA1NjY1NTUxNTI0ODAwNSw1NS45ODQzMzM3NzcwNDY2NV0sWy03LjAwNTY2NTU1MTUyNDgwMDUsNDkuNTI5Nzc1NDMxOTUwNTldLFszLjU5ODI1MTcyOTcwNDQ0MjUsNDkuNTI5Nzc1NDMxOTUwNTldLFszLjU5ODI1MTcyOTcwNDQ0MjUsNTUuOTg0MzMzNzc3MDQ2NjVdXSwiaXNCYm94Ijp0cnVlfV0%3D&amp;initial=1">CMEMS My Ocean Viewer</a> using the “Atlantic-Iberian Biscay Irish- Ocean Biogeochemical Analysis and Forecast” product.</p>
+<p>This is the product page:  <a href="https://resources.marine.copernicus.eu/product-detail/IBI_MULTIYEAR_BGC_005_003/INFORMATION">NON ASSIMILATIVE Hindcast - IBI_MULTIYEAR_BGC_005_003</a>.</p>
 <ul>
-<li>[ ] To do: incorporate the code to retrieve the data automatically using the Copernicus API through the Motu client.</li>
+<li>[x] To do: retrieve the data using the Copernicus API through the Motu client.</li>
 </ul>
-<p><strong>02 Calculating the sub-indices</strong></p>
-<p>Then we calculate the indices for nutrients, chlorophyll and euphotic depth, and sum them, following Sarelli et al (2018). This is done using <code>eutrophication_utils.py</code>.</p>
-<p><strong>03 Calculating the ICEP</strong></p>
-<p>ICEP is the sum of the above indices. This is also done using <code>eutrophication_utils.py</code>. The output is saved as a netCDF4 file <code>index_eutroph_2017.nc</code> in the <code>out_dir</code> folder, which is created in this notebook and is called by default <code>Sarelli_et_al2018_Aug2017_example_out</code>.</p>
-<p><strong>04 Plots</strong></p>
-<p>By default we have:</p>
-
-<pre><code>save_plot = False # saves plots to out_dir
-show_all = False # show all the plots, at all steps</code></pre>
-<p>but we left some plotting functions in case it's helpful.</p>
-<h3> Requirements </h3><p>The requirements can be found in the <code>requirements.txt</code> file in the folder. Note that</p>
-
-<pre><code>import session_info
-session_info.show()</code></pre>
-<p>shows:</p>
-
-<pre><code>Click to view session information
-
------
-cartopy                     0.20.2
-cmocean                     2.0
-eutrophication_utils        NA
-matplotlib                  3.5.1
-netCDF4                     1.5.8
-numpy                       1.22.3
-pandas                      1.4.2
-seaborn                     0.11.2
-session_info                1.0.0
-xarray                      0.16.1
------
-
-Click to view modules imported as dependencies
-
------
-IPython             8.2.0
-jupyter_client      6.1.7
-jupyter_core        4.9.2
-notebook            6.4.11
------
-Python 3.10.4 | packaged by conda-forge | (main, Mar 24 2022, 17:39:37) [Clang 12.0.1 ]
-macOS-12.1-arm64-arm-64bit
------
-Session information updated at 2022-05-09 14:02</code></pre>
-<p>__</p>
-<h3> References</h3><p>Sarelli, A., Sykas, D., Miltiadou, M., Bliziotis, D., Spastra, Y. and Ieronymaki, M., 2018, August. A novel automated methodology that estimates the United Nations (UN) Sustainable Development Goal (SDG) 14.1. 1.: index of coastal eutrophication using the Copernicus Marine Environment Monitoring Service (CMEMS). In <em>Sixth International Conference on Remote Sensing and Geoinformation of the Environment (RSCy2018)</em> (Vol. 10773, p. 1077302). International Society for Optics and Photonics.<a href="http://doi.org/10.1117/12.2326160">doi:10.1117/12.2326160</a>
-&lt;/details&gt;</p>
+<p>Here, we use the <code>motuclient</code> to retrieve the data. NOTE: you need a registered username!</p>
+<h3> References</h3><p>Sarelli, A., Sykas, D., Miltiadou, M., Bliziotis, D., Spastra, Y. and Ieronymaki, M., 2018, August. A novel automated methodology that estimates the United Nations (UN) Sustainable Development Goal (SDG) 14.1. 1.: index of coastal eutrophication using the Copernicus Marine Environment Monitoring Service (CMEMS). In <em>Sixth International Conference on Remote Sensing and Geoinformation of the Environment (RSCy2018)</em> (Vol. 10773, p. 1077302). International Society for Optics and Photonics.<a href="http://doi.org/10.1117/12.2326160">doi:10.1117/12.2326160</a></p>
 <p>Hofste, R.W., Kuzma, S., Walker, S., Sutanudjaja, E.H., Bierkens, M.F., Kuijper, M.J., Sanchez, M.F., Van Beek, R., Wada, Y., Rodríguez, S.G. and Reig, P., 2019. Aqueduct 3.0: Updated decision-relevant global water risk indicators. <em>World Resources Institute: Washington, DC, USA</em>. Available online at: <a href="https://www.wri.org/publication/aqueduct-30">https://www.wri.org/publication/aqueduct-30</a>.</p>
 
 </div>
@@ -13195,9 +13150,7 @@ Session information updated at 2022-05-09 14:02</code></pre>
 <div class="prompt input_prompt">In&nbsp;[1]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># computations packages</span>
-<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-<span class="kn">import</span> <span class="nn">xarray</span> <span class="k">as</span> <span class="nn">xr</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
 </pre></div>
 
     </div>
@@ -13205,15 +13158,57 @@ Session information updated at 2022-05-09 14:02</code></pre>
 </div>
 
 </div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3> Source directory where CMEMS file(s) are saved </h3>
+</div>
+</div>
+</div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
 <div class="prompt input_prompt">In&nbsp;[2]:</div>
 <div class="inner_cell">
     <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">source_dir</span> <span class="o">=</span> <span class="s2">&quot;data_CMEMS&quot;</span>
+<span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">source_dir</span><span class="p">):</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">source_dir</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;The downloaded files will be saved in the following directory:&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">source_dir</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+    <div class="prompt"></div>
+
+
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>The downloaded files will be saved in the following directory:
+data_CMEMS
+</pre>
+</div>
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[3]:</div>
+<div class="inner_cell">
+    <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># utilities packages</span>
 <span class="kn">import</span> <span class="nn">datetime</span>
 <span class="kn">from</span> <span class="nn">netCDF4</span> <span class="kn">import</span> <span class="n">Dataset</span>
-<span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
 </pre></div>
 
@@ -13224,7 +13219,7 @@ Session information updated at 2022-05-09 14:02</code></pre>
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[3]:</div>
+<div class="prompt input_prompt">In&nbsp;[4]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># plotting packages</span>
@@ -13250,7 +13245,7 @@ Session information updated at 2022-05-09 14:02</code></pre>
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[4]:</div>
+<div class="prompt input_prompt">In&nbsp;[5]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="kn">from</span> <span class="nn">eutrophication_utils</span> <span class="kn">import</span> <span class="o">*</span>
@@ -13264,27 +13259,7 @@ Session information updated at 2022-05-09 14:02</code></pre>
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h2>I/O considerations </h2>
-</div>
-</div>
-</div>
-<div class="cell border-box-sizing code_cell rendered">
-<div class="input">
-<div class="prompt input_prompt">In&nbsp;[5]:</div>
-<div class="inner_cell">
-    <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">year</span> <span class="o">=</span> <span class="mi">2017</span>
-</pre></div>
-
-    </div>
-</div>
-</div>
-
-</div>
-<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
-</div><div class="inner_cell">
-<div class="text_cell_render border-box-sizing rendered_html">
-<h3> Source directory for CMEMS </h3>
+<h3> Year as variable to save results to their respective folders </h3>
 </div>
 </div>
 </div>
@@ -13293,7 +13268,7 @@ Session information updated at 2022-05-09 14:02</code></pre>
 <div class="prompt input_prompt">In&nbsp;[6]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">source_dir</span> <span class="o">=</span> <span class="s2">&quot;/Users/margaux/OpenEarth/out_dir/20170803-20170810/&quot;</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">year</span> <span class="o">=</span> <span class="mi">2017</span>
 </pre></div>
 
     </div>
@@ -13354,6 +13329,64 @@ Session information updated at 2022-05-09 14:02</code></pre>
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
+<p>We use the motuclient:</p>
+
+<pre><code>--motu https://my.cmems-du.eu/motu-web/Motu \
+--service-id IBI_MULTIYEAR_BGC_005_003-TDS \
+--product-id cmems_mod_ibi_bgc_my_0.083deg-3D_P1D-m \</code></pre>
+<p>This refers to the specific CMEMS product mentioned above. Note that for dates between <code>2020-05-02 12:00:00</code> and <code>2022-05-14 12:00:00</code> we would use <code>IBI_ANALYSISFORECAST_BGC_005_004-TDS</code> instead.</p>
+<p>To illustrate how to recreate the results from Sarelli et al (2018), we first focus on the "Week 1" subpanel in Figure 6: the first week of August 2017. The authors did not provide exact spatio-temporal bounds, so I guessed the following:</p>
+
+<pre><code>--date-min '2017-08-03 00:00:00' \
+--date-max '2017-08-10 23:59:59' \
+--longitude-min -7 --longitude-max 3.5 --latitude-min 49.5 --latitude-max 55.0 \</code></pre>
+<p>We also download surface data only:</p>
+
+<pre><code>--depth-min 0.5057600140571594 --depth-max 0.5057600140571594</code></pre>
+<p>We download all the following variables at once:</p>
+
+<pre><code>--variable no3 \
+--variable po4 \
+--variable si \
+--variable chl \
+--variable zeu \</code></pre>
+<p>Finally we save the downloaded file to the specified <code>out-dir</code> and <code>out-name</code>.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[&nbsp;]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="o">!</span>python3 -m motuclient <span class="err">\</span>
+<span class="o">--</span><span class="n">motu</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">my</span><span class="o">.</span><span class="n">cmems</span><span class="o">-</span><span class="n">du</span><span class="o">.</span><span class="n">eu</span><span class="o">/</span><span class="n">motu</span><span class="o">-</span><span class="n">web</span><span class="o">/</span><span class="n">Motu</span> \
+<span class="o">--</span><span class="n">service</span><span class="o">-</span><span class="nb">id</span> <span class="n">IBI_MULTIYEAR_BGC_005_003</span><span class="o">-</span><span class="n">TDS</span> \
+<span class="o">--</span><span class="n">product</span><span class="o">-</span><span class="nb">id</span> <span class="n">cmems_mod_ibi_bgc_my_0</span><span class="o">.</span><span class="mi">083</span><span class="n">deg</span><span class="o">-</span><span class="mi">3</span><span class="n">D_P1D</span><span class="o">-</span><span class="n">m</span> \
+<span class="o">--</span><span class="n">date</span><span class="o">-</span><span class="nb">min</span> <span class="s1">&#39;2017-08-03 00:00:00&#39;</span> \
+<span class="o">--</span><span class="n">date</span><span class="o">-</span><span class="nb">max</span> <span class="s1">&#39;2017-08-10 23:59:59&#39;</span> \
+<span class="o">--</span><span class="n">depth</span><span class="o">-</span><span class="nb">min</span> <span class="mf">0.5057600140571594</span> \
+<span class="o">--</span><span class="n">depth</span><span class="o">-</span><span class="nb">max</span> <span class="mf">0.5057600140571594</span> \
+<span class="o">--</span><span class="n">variable</span> <span class="n">no3</span> \
+<span class="o">--</span><span class="n">variable</span> <span class="n">po4</span> \
+<span class="o">--</span><span class="n">variable</span> <span class="n">si</span> \
+<span class="o">--</span><span class="n">variable</span> <span class="n">chl</span> \
+<span class="o">--</span><span class="n">variable</span> <span class="n">zeu</span> \
+<span class="o">--</span><span class="n">out</span><span class="o">-</span><span class="nb">dir</span> <span class="s1">&#39;data_CMEMS&#39;</span> \
+<span class="o">--</span><span class="n">out</span><span class="o">-</span><span class="n">name</span> <span class="s1">&#39;chl_no3_po4_si_zeu_201708.nc&#39;</span> \
+<span class="o">--</span><span class="n">longitude</span><span class="o">-</span><span class="nb">min</span> <span class="o">-</span><span class="mi">7</span> <span class="o">--</span><span class="n">longitude</span><span class="o">-</span><span class="nb">max</span> <span class="mf">3.5</span> <span class="o">--</span><span class="n">latitude</span><span class="o">-</span><span class="nb">min</span> <span class="mf">49.5</span> <span class="o">--</span><span class="n">latitude</span><span class="o">-</span><span class="nb">max</span> <span class="mf">55.0</span> \
+<span class="o">--</span><span class="n">user</span> <span class="o">&lt;</span><span class="n">YOUR_USERNAME_HERE</span><span class="o">&gt;</span> <span class="o">--</span><span class="n">pwd</span> <span class="o">&lt;</span><span class="n">YOUR_PASSWORD_HERE</span><span class="o">&gt;</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
 <p>Import local data from <code>source_dir</code>.</p>
 
 </div>
@@ -13361,7 +13394,7 @@ Session information updated at 2022-05-09 14:02</code></pre>
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[9]:</div>
+<div class="prompt input_prompt">In&nbsp;[10]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">fnames</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">source_dir</span><span class="p">)</span>
@@ -13382,7 +13415,7 @@ Session information updated at 2022-05-09 14:02</code></pre>
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[10]:</div>
+<div class="prompt input_prompt">In&nbsp;[11]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">indep_var</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;depth&quot;</span><span class="p">,</span> <span class="s2">&quot;latitude&quot;</span><span class="p">,</span> <span class="s2">&quot;time&quot;</span><span class="p">,</span> <span class="s2">&quot;longitude&quot;</span><span class="p">]</span>
@@ -13403,7 +13436,7 @@ Session information updated at 2022-05-09 14:02</code></pre>
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[11]:</div>
+<div class="prompt input_prompt">In&nbsp;[12]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="k">for</span> <span class="n">fname</span> <span class="ow">in</span> <span class="n">fnames</span><span class="p">:</span>
@@ -13435,11 +13468,11 @@ Session information updated at 2022-05-09 14:02</code></pre>
 
 
 <div class="output_subarea output_stream output_stdout output_text">
-<pre>The variable chl was imported.
-The variable zeu was imported.
-The variable no3 was imported.
-The variable si was imported.
+<pre>The variable no3 was imported.
 The variable po4 was imported.
+The variable si was imported.
+The variable chl was imported.
+The variable zeu was imported.
 </pre>
 </div>
 </div>
@@ -13450,7 +13483,7 @@ The variable po4 was imported.
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[12]:</div>
+<div class="prompt input_prompt">In&nbsp;[13]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;The resolution is: &quot;</span><span class="p">)</span>
@@ -13487,7 +13520,7 @@ The variable po4 was imported.
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[13]:</div>
+<div class="prompt input_prompt">In&nbsp;[14]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># This is helpful in e.g. case po4.latitude.shape != chl.latitude.shape</span>
@@ -13526,7 +13559,7 @@ combines euphotic zone depth with the SD of a water region is used according to 
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[14]:</div>
+<div class="prompt input_prompt">In&nbsp;[15]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">linear_fn</span> <span class="o">=</span> <span class="kc">True</span>
@@ -13547,7 +13580,7 @@ combines euphotic zone depth with the SD of a water region is used according to 
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[15]:</div>
+<div class="prompt input_prompt">In&nbsp;[16]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">po4</span><span class="o">.</span><span class="n">po4</span><span class="o">.</span><span class="n">long_name</span> <span class="o">+</span> <span class="s2">&quot;: &quot;</span> <span class="o">+</span> <span class="n">po4</span><span class="o">.</span><span class="n">po4</span><span class="o">.</span><span class="n">units</span><span class="p">)</span>
@@ -13590,20 +13623,20 @@ Mole Concentration of Silicate in Sea Water: mmol.m-3
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[16]:</div>
+<div class="prompt input_prompt">In&nbsp;[17]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="k">if</span> <span class="p">(</span><span class="n">po4</span><span class="o">.</span><span class="n">longitude</span> <span class="o">==</span> <span class="n">no3</span><span class="o">.</span><span class="n">longitude</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">()</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">po4</span><span class="o">.</span><span class="n">longitude</span> <span class="o">==</span> <span class="n">si</span><span class="o">.</span><span class="n">longitude</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span> 
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">if</span> <span class="p">(</span><span class="n">po4</span><span class="o">.</span><span class="n">longitude</span> <span class="o">==</span> <span class="n">no3</span><span class="o">.</span><span class="n">longitude</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">po4</span><span class="o">.</span><span class="n">longitude</span> <span class="o">==</span> <span class="n">si</span><span class="o">.</span><span class="n">longitude</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span> 
     <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;The longitude coordinates are compatible!&quot;</span><span class="p">)</span>
 <span class="k">else</span><span class="p">:</span>
     <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Issues with longitude compatibility. Check out https://docs.xarray.dev/en/stable/generated/xarray.combine_by_coords.html to auto-magically combine the datasets!&quot;</span><span class="p">)</span>
 
-<span class="k">if</span> <span class="p">(</span><span class="n">po4</span><span class="o">.</span><span class="n">latitude</span> <span class="o">==</span> <span class="n">no3</span><span class="o">.</span><span class="n">latitude</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">()</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">po4</span><span class="o">.</span><span class="n">latitude</span> <span class="o">==</span> <span class="n">si</span><span class="o">.</span><span class="n">latitude</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">po4</span><span class="o">.</span><span class="n">latitude</span> <span class="o">==</span> <span class="n">no3</span><span class="o">.</span><span class="n">latitude</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">po4</span><span class="o">.</span><span class="n">latitude</span> <span class="o">==</span> <span class="n">si</span><span class="o">.</span><span class="n">latitude</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
     <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;The latitude coordinates are compatible!&quot;</span><span class="p">)</span>
 <span class="k">else</span><span class="p">:</span>
     <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Issues with latitude compatibility. Check out https://docs.xarray.dev/en/stable/generated/xarray.combine_by_coords.html to auto-magically combine the datasets!&quot;</span><span class="p">)</span>
     
-<span class="k">if</span> <span class="p">(</span><span class="n">po4</span><span class="o">.</span><span class="n">depth</span> <span class="o">==</span> <span class="n">no3</span><span class="o">.</span><span class="n">depth</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">()</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">po4</span><span class="o">.</span><span class="n">depth</span> <span class="o">==</span> <span class="n">si</span><span class="o">.</span><span class="n">depth</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">po4</span><span class="o">.</span><span class="n">depth</span> <span class="o">==</span> <span class="n">no3</span><span class="o">.</span><span class="n">depth</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">po4</span><span class="o">.</span><span class="n">depth</span> <span class="o">==</span> <span class="n">si</span><span class="o">.</span><span class="n">depth</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
     <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;The depth coordinates are compatible!&quot;</span><span class="p">)</span>
 <span class="k">else</span><span class="p">:</span>
     <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Issues with depth coordinate compatibility. Check out https://docs.xarray.dev/en/stable/generated/xarray.combine_by_coords.html to auto-magically combine the datasets!&quot;</span><span class="p">)</span>
@@ -13636,7 +13669,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[17]:</div>
+<div class="prompt input_prompt">In&nbsp;[18]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">ind_N</span> <span class="o">=</span> <span class="n">get_indN</span><span class="p">(</span><span class="n">no3</span><span class="o">.</span><span class="n">no3</span><span class="o">.</span><span class="n">isel</span><span class="p">(</span><span class="n">depth</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">time</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span> 
@@ -13666,7 +13699,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[18]:</div>
+<div class="prompt input_prompt">In&nbsp;[19]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">chl</span><span class="o">.</span><span class="n">chl</span><span class="o">.</span><span class="n">long_name</span> <span class="o">+</span> <span class="s2">&quot;: &quot;</span> <span class="o">+</span> <span class="n">chl</span><span class="o">.</span><span class="n">chl</span><span class="o">.</span><span class="n">units</span><span class="p">)</span>
@@ -13697,7 +13730,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[19]:</div>
+<div class="prompt input_prompt">In&nbsp;[20]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">ind_chl</span> <span class="o">=</span> <span class="n">get_ind_chl</span><span class="p">(</span><span class="n">chl</span><span class="o">.</span><span class="n">chl</span><span class="o">.</span><span class="n">isel</span><span class="p">(</span><span class="n">depth</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">time</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
@@ -13725,7 +13758,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[20]:</div>
+<div class="prompt input_prompt">In&nbsp;[21]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">Z_SD</span> <span class="o">=</span> <span class="n">get_Z_SD</span><span class="p">(</span><span class="n">zeu</span><span class="p">);</span>
@@ -13746,7 +13779,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[21]:</div>
+<div class="prompt input_prompt">In&nbsp;[22]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">ind_Z_SD</span> <span class="o">=</span> <span class="n">get_ind_ZSD</span><span class="p">(</span><span class="n">Z_SD</span><span class="o">.</span><span class="n">zeu</span><span class="o">.</span><span class="n">isel</span><span class="p">(</span><span class="n">time</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
@@ -13766,7 +13799,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[22]:</div>
+<div class="prompt input_prompt">In&nbsp;[23]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">index_eutroph</span> <span class="o">=</span> <span class="n">get_index</span><span class="p">(</span><span class="n">ind_N</span><span class="p">,</span> <span class="n">ind_chl</span><span class="p">,</span> <span class="n">ind_Z_SD</span><span class="p">)</span>
@@ -13787,7 +13820,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[23]:</div>
+<div class="prompt input_prompt">In&nbsp;[24]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">index_eutroph</span><span class="o">.</span><span class="n">to_netcdf</span><span class="p">(</span><span class="n">out_dir</span> <span class="o">+</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="s2">&quot;index_eutroph_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">year</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;.nc&quot;</span><span class="p">)</span>
@@ -13815,7 +13848,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[24]:</div>
+<div class="prompt input_prompt">In&nbsp;[25]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">Lon</span><span class="p">,</span> <span class="n">Lat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">zeu</span><span class="o">.</span><span class="n">longitude</span><span class="p">,</span> <span class="n">zeu</span><span class="o">.</span><span class="n">latitude</span><span class="p">)</span>
@@ -13828,7 +13861,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[25]:</div>
+<div class="prompt input_prompt">In&nbsp;[26]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">ts</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_datetime</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">zeu</span><span class="o">.</span><span class="n">time</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">data</span><span class="p">))</span> 
@@ -13841,7 +13874,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[26]:</div>
+<div class="prompt input_prompt">In&nbsp;[27]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">d</span> <span class="o">=</span> <span class="n">ts</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s1">&#39;%Y-%m-</span><span class="si">%d</span><span class="s1">&#39;</span><span class="p">)</span>
@@ -13862,7 +13895,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[27]:</div>
+<div class="prompt input_prompt">In&nbsp;[28]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="k">if</span> <span class="n">show_all</span><span class="p">:</span>
@@ -13898,7 +13931,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[28]:</div>
+<div class="prompt input_prompt">In&nbsp;[29]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="k">if</span> <span class="n">show_all</span><span class="p">:</span>
@@ -13934,7 +13967,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[29]:</div>
+<div class="prompt input_prompt">In&nbsp;[30]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="k">if</span> <span class="n">show_all</span><span class="p">:</span>
@@ -13970,7 +14003,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[30]:</div>
+<div class="prompt input_prompt">In&nbsp;[31]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="k">if</span> <span class="n">show_all</span><span class="p">:</span>
@@ -14006,7 +14039,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[31]:</div>
+<div class="prompt input_prompt">In&nbsp;[32]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="k">if</span> <span class="n">show_all</span><span class="p">:</span>
@@ -14042,7 +14075,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[32]:</div>
+<div class="prompt input_prompt">In&nbsp;[33]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="k">if</span> <span class="n">show_all</span><span class="p">:</span>
@@ -14085,7 +14118,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[33]:</div>
+<div class="prompt input_prompt">In&nbsp;[34]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">pcolor</span><span class="p">(</span><span class="n">ind_N</span><span class="p">,</span> <span class="n">cmap</span> <span class="o">=</span> <span class="n">sns</span><span class="o">.</span><span class="n">cubehelix_palette</span><span class="p">(</span><span class="n">as_cmap</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
@@ -14124,7 +14157,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[34]:</div>
+<div class="prompt input_prompt">In&nbsp;[35]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">pcolor</span><span class="p">(</span><span class="n">ind_chl</span><span class="p">,</span> <span class="n">cmap</span> <span class="o">=</span> <span class="n">sns</span><span class="o">.</span><span class="n">cubehelix_palette</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">rot</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">dark</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">as_cmap</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
@@ -14163,7 +14196,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[35]:</div>
+<div class="prompt input_prompt">In&nbsp;[36]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">pcolor</span><span class="p">(</span><span class="n">ind_chl</span><span class="p">,</span> <span class="n">cmap</span> <span class="o">=</span> <span class="n">sns</span><span class="o">.</span><span class="n">cubehelix_palette</span><span class="p">(</span><span class="n">start</span><span class="o">=.</span><span class="mi">5</span><span class="p">,</span> <span class="n">rot</span><span class="o">=-.</span><span class="mi">5</span><span class="p">,</span> <span class="n">as_cmap</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
@@ -14209,7 +14242,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[36]:</div>
+<div class="prompt input_prompt">In&nbsp;[37]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">pcm</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">pcolor</span><span class="p">(</span><span class="n">index_eutroph</span><span class="p">,</span> <span class="n">cmap</span> <span class="o">=</span> <span class="s1">&#39;Spectral_r&#39;</span><span class="p">);</span>
@@ -14246,7 +14279,7 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[37]:</div>
+<div class="prompt input_prompt">In&nbsp;[38]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">fig</span><span class="p">,</span> <span class="n">axs</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span><span class="mi">10</span><span class="p">))</span>
@@ -14314,13 +14347,14 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[38]:</div>
+<div class="prompt input_prompt">In&nbsp;[39]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># This plots the matrix with all indices, including ICEP==zero (e.g. offshore)</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># This plots the matrix with ALL indices, including ICEP==zero (e.g. offshore)</span>
 <span class="c1"># following the colormap from Sarelli et al (2018).</span>
 <span class="c1"># This does not highlight actionable data for eutrophication as ICEP is coastal</span>
-<span class="c1"># and offshore values will tend to zero. It however helps check the calculations.</span>
+<span class="c1"># and offshore values will tend to zero. It however helps check the subsequent</span>
+<span class="c1"># calculations when we aim to create a time series.</span>
 <span class="k">if</span> <span class="n">show_all</span><span class="p">:</span>
     <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span><span class="mi">7</span><span class="p">))</span>
 
@@ -14399,10 +14433,12 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[39]:</div>
+<div class="prompt input_prompt">In&nbsp;[40]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span><span class="mi">14</span><span class="p">))</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># Another custom plot for fun.</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span><span class="mi">14</span><span class="p">))</span>
 
 <span class="c1"># Creates the map</span>
 <span class="n">mymap</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">axes</span><span class="p">(</span><span class="n">projection</span><span class="o">=</span><span class="n">ccrs</span><span class="o">.</span><span class="n">PlateCarree</span><span class="p">())</span>
@@ -14459,10 +14495,13 @@ The depth coordinates are compatible!
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[40]:</div>
+<div class="prompt input_prompt">In&nbsp;[41]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span><span class="mi">14</span><span class="p">))</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># This plots the matrix with selected indices, as we try to recreate</span>
+<span class="c1"># the colormap in Figure 6 from Sarelli et al (2018).</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span><span class="mi">14</span><span class="p">))</span>
 
 <span class="c1"># Creates the map</span>
 <span class="n">mymap</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">axes</span><span class="p">(</span><span class="n">projection</span><span class="o">=</span><span class="n">ccrs</span><span class="o">.</span><span class="n">PlateCarree</span><span class="p">())</span>
@@ -14541,9 +14580,17 @@ The depth coordinates are compatible!
 </div>
 
 </div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>I think we are very close!</p>
+
+</div>
+</div>
+</div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[41]:</div>
+<div class="prompt input_prompt">In&nbsp;[42]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">session_info</span>
@@ -14560,7 +14607,7 @@ The depth coordinates are compatible!
 
 <div class="output_area">
 
-    <div class="prompt output_prompt">Out[41]:</div>
+    <div class="prompt output_prompt">Out[42]:</div>
 
 
 
@@ -14666,7 +14713,7 @@ notebook            6.4.11
 Python 3.10.4 | packaged by conda-forge | (main, Mar 24 2022, 17:39:37) [Clang 12.0.1 ]
 macOS-12.1-arm64-arm-64bit
 -----
-Session information updated at 2022-05-09 14:08
+Session information updated at 2022-05-09 20:14
 </pre>
 </details>
 </div>
