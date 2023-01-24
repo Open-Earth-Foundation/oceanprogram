@@ -1,7 +1,6 @@
-<h1> Calculating and comparing marine biodiversity metrics for ACMC </h1>
-![ACMC_map](https://user-images.githubusercontent.com/107511484/214368782-e69814c6-4ff6-4d74-b96a-4574c6096c25.png)
+<h1> Calculating and comparing marine biodiversity metrics </h1>
 
-
+Most of our work are focus in Costa Rica, specifically in Coco's Marine Conservation Area [ACMC](https://www.sinac.go.cr/ES/ac/acmic/Paginas/default.aspx)
 This series of notebooks aims to calculate different marine biodiversity indices, such as:
 - WEGE
 - STAR
