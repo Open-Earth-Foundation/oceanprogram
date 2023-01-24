@@ -40,6 +40,9 @@ for a few areas around Cocos Island, Costa Rica:
 - AMMB, or Área Marina de Manejo del Bicentenario (marine protected area that got extended for the bicentennial)
 - PNIC, or Parque National de Isla del Coco (Cocos Island national park)
 - ACMC, or Area de Conservación Marina Coco (AMMB + PNIC)([ACMC](https://www.sinac.go.cr/ES/ac/acmic/Paginas/default.aspx))
+![ACMC_map](https://user-images.githubusercontent.com/107511484/214371545-7ae96ae4-c71a-42d1-8208-6aac30f8e3d0.png)
+
+
 
 We will later extend to the Eastern Tropical Pacific. 
 The main data source that we use is UICN.
