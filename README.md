@@ -35,48 +35,11 @@ To develop a scalable system of marine biodiversity credits, **we must first def
 
 ## Content and Uses
 
-1. This series of notebooks aims to calculate different marine biodiversity indices:
-- WEGE: Weighted Endemism including Global Endangerment index
-- STAR: Species Threat Abatement and Recovery
-- other Marine Biodiversity Units
-2. Documentation about our testing work
-3. Maps and relevant documentation about our pilot plan in Coco's Marine Conservation Area in Costa Rica
+Here you can find resources as:
+- Open Ocean Whitepapers 
+- the methodologies we are testing for the creation of Marine Ecosystem Credits
 
-## Data needed for this project
-
-**IUCN RedList**
-The data was output by `ACMC_IUCN_step1_curatedata.ipynb`. It has been gathered on our [Google Drive](https://drive.google.com/drive/folders/1yElWSaK0tWvlyDvjNUSpqnnwEJGMGdPX?usp=sharing) under a temporary folder that accompagnies the GitHub repository: 
-
-`Ocean Program > data > to download for gh > ACMC_IUCN_data`
-
-Source: [IUCN Red List](https://www.iucnredlist.org/resources/spatial-data-download)
-
-**Geospatial Data to ACMC**
-
-`Ocean Program > data > to download for gh > geospatial_input`
-
-Source: [SNIT CR](https://www.snitcr.go.cr/)
-
-**Bathymetry Data**
-
-`Ocean Program > data > to download for gh > Bathymetry_Data`
-
-Source: [GEBCO](https://www.gebco.net/)
-
-## Installation
-```bash
-- Geopandas
-- Numpy
-- Pandas
-- Glob
-- Shapely.geometry
-- Fiona
-- Seaborn
-```
-
-```bash
-OEF Funtions
-```
+If you want to learn more about the status of our work in the Marine Biodiversity Credit, please review our [MBU Status Page]
 
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
