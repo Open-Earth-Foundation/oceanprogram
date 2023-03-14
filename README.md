@@ -1,7 +1,6 @@
 # Ocean Program
 
 Repository for the [Ocean Program](https://www.openearth.org/projects/ocean-program) at the Open Earth Foundation.
-![Logotype Versions_Vertical Version](https://user-images.githubusercontent.com/107511484/204840228-cc408d2a-79ae-4818-b09d-0903bb4831a6.png)
 
 ## Overview
 
@@ -39,7 +38,7 @@ Here you can find resources as:
 - Open Ocean Whitepapers 
 - the methodologies we are testing for the creation of Marine Ecosystem Credits
 
-If you want to learn more about the status of our work in the Marine Biodiversity Credit, please review our [MBU Status Page]
+If you want to learn more about the status of our work in the Marine Biodiversity Credit, please review our [MBU Status Page](https://www.notion.so/openearth/Marine-Biodiversity-Credit-Status-Open-381755efad894eacb6204b78bbfc352d)
 
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
