@@ -174,6 +174,50 @@ def count_overlapping_geometries(gdf):
     
     return new_gdf
 
+
+#---------------------------------------------------------------------------------------------------------------------
+#Summation Values of Overlapping Geometries
+#---------------------------------------------------------------------------------------------------------------------
+
+#This function calculates the sum of all values of an interest colum of overlapping geometries 
+def sum_values(gdf, gdf_col_name):
+    """
+    This function calculates the sum of all values of an interest colum of overlapping geometries 
+    Input:
+    gdf <geopandas dataframe>: consists of polygons
+    colum_name <string>: column name that has the value that we want to sum
+
+    Output:
+    gdf <geopandas dataframe>: consists of polygons with a new colum with a summation of interest values
+    """
+    #main source: https://stackoverflow.com/questions/65073549/combine-and-sum-values-of-overlapping-polygons-in-geopandas
+
+    #The explode() method converts each element of the specified column(s) into a row
+    #This is useful if there are multipolygons
+    new_gdf = gdf.explode('geometry')
+    new_gdf['new_colum'] = new_gdf[str(gdf_col_name)]
+
+    #convert all polygons to lines and perform union
+    lines = unary_union(linemerge([geom.exterior for geom in new_gdf.geometry]))
+
+    #convert again to (smaller) intersecting polygons and to geodataframe
+    polygons = list(polygonize(lines))
+    intersects = gpd.GeoDataFrame({'geometry': polygons}, crs="EPSG:4326")
+
+    #to fix invalid geometries
+    intersects['geometry'] = intersects['geometry'].buffer(0)
+
+    #Perform sjoin with original geoframe to get overlapping polygons.
+    #Afterwards group per intersecting polygon to perform (arbitrary) aggregation
+    intersects['sum_overlaps'] = (intersects
+                            .sjoin(new_gdf, predicate='within')
+                            .reset_index()
+                            .groupby(['level_0', 'index_right0'])
+                            .head(1)
+                            .groupby('level_0')
+                            .new_colum.sum())
+    return intersects
+
 #---------------------------------------------------------------------------------------------------------------------
 #Clip Function for EFG
 #---------------------------------------------------------------------------------------------------------------------
