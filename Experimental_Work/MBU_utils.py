@@ -175,6 +175,49 @@ def count_overlapping_geometries(gdf):
     return new_gdf
 
 #---------------------------------------------------------------------------------------------------------------------
+#Summation Values of Overlapping Geometries
+#---------------------------------------------------------------------------------------------------------------------
+
+#This function calculates the sum of all values of an interest colum of overlapping geometries 
+def sum_values(gdf, gdf_col_name):
+    """
+    This function calculates the sum of all values of an interest colum of overlapping geometries 
+    Input:
+    gdf <geopandas dataframe>: consists of polygons
+    colum_name <string>: column name that has the value that we want to sum
+
+    Output:
+    gdf <geopandas dataframe>: consists of polygons with a new colum with a summation of interest values
+    """
+    #main source: https://stackoverflow.com/questions/65073549/combine-and-sum-values-of-overlapping-polygons-in-geopandas
+
+    #The explode() method converts each element of the specified column(s) into a row
+    #This is useful if there are multipolygons
+    new_gdf = gdf.explode('geometry')
+    new_gdf['new_colum'] = new_gdf[str(gdf_col_name)]
+
+    #convert all polygons to lines and perform union
+    lines = unary_union(linemerge([geom.exterior for geom in new_gdf.geometry]))
+
+    #convert again to (smaller) intersecting polygons and to geodataframe
+    polygons = list(polygonize(lines))
+    intersects = gpd.GeoDataFrame({'geometry': polygons}, crs="EPSG:4326")
+
+    #to fix invalid geometries
+    intersects['geometry'] = intersects['geometry'].buffer(0)
+
+    #Perform sjoin with original geoframe to get overlapping polygons.
+    #Afterwards group per intersecting polygon to perform (arbitrary) aggregation
+    intersects['sum_overlaps'] = (intersects
+                            .sjoin(new_gdf, predicate='within')
+                            .reset_index()
+                            .groupby(['level_0', 'index_right0'])
+                            .head(1)
+                            .groupby('level_0')
+                            .new_colum.sum())
+    return intersects
+
+#---------------------------------------------------------------------------------------------------------------------
 #Clip Function for EFG
 #---------------------------------------------------------------------------------------------------------------------
 
@@ -333,7 +376,8 @@ def mbu_species_richness(roi, gdf, grid_gdf):
     merged['n_species']= overlap_geo['count_intersections']
 
     # Compute stats per grid cell
-    dissolve = merged.dissolve(by="index_right")#, aggfunc="count")
+    #aggfunc: sum the values of all the geometries that dissolve
+    dissolve = merged.dissolve(by="index_right", aggfunc={'n_species': 'sum'})
 
     # put this into cell
     grid_gdf.loc[dissolve.index, 'n_species'] = dissolve.n_habitats.values
@@ -383,51 +427,15 @@ def mbu_endemism(roi, gdf, grid_gdf, transform="log"):
     df2["log_dist2"] = log_dist2
     
     #Function that calculates the sum of the individual log_dist2 values of all species of overlapping geometries
-    def sum_values(gdf):
-        """
-        Input:
-        gdf <geopandas dataframe>: consists of polygons
-        colum_name <string>: column name that has the value that we want to sum
-    
-        Output:
-        gdf <geopandas dataframe>: consists of polygons with a new colum with a summation of interest values
-        """
-        #main source: https://stackoverflow.com/questions/65073549/combine-and-sum-values-of-overlapping-polygons-in-geopandas
-
-        #The explode() method converts each element of the specified column(s) into a row
-        #This is useful if there are multipolygons
-        new_gdf = gdf.explode('geometry')
-
-        #convert all polygons to lines and perform union
-        lines = unary_union(linemerge([geom.exterior for geom in new_gdf.geometry]))
-
-        #convert again to (smaller) intersecting polygons and to geodataframe
-        polygons = list(polygonize(lines))
-        intersects = gpd.GeoDataFrame({'geometry': polygons}, crs="EPSG:4326")
-    
-        #to fix invalid geometries
-        intersects['geometry'] = intersects['geometry'].buffer(0)
-
-        #Perform sjoin with original geoframe to get overlapping polygons.
-        #Afterwards group per intersecting polygon to perform (arbitrary) aggregation
-        intersects['sum_overlaps'] = (intersects
-                                .sjoin(new_gdf, predicate='within')
-                                .reset_index()
-                                .groupby(['level_0', 'index_right0'])
-                                .head(1)
-                                .groupby('level_0')
-                                .log_dist2.sum())
-        return intersects
-    
-    #Call the sum_values function
-    overlap_endemic_v = sum_values(df2)
+    overlap_endemic_v = sum_values(df2,'log_dist2')
     
     #Merged the log_dist2 values of overlapping geometries with the grid gdf
     merged = gpd.sjoin(overlap_endemic_v, grid_gdf, how='left')
     merged['n_value']= overlap_endemic_v['sum_overlaps']
 
-    #Compute stats per grid cell
-    dissolve = merged.dissolve(by="index_right", aggfunc="sum")
+    # Compute stats per grid cell
+    #aggfunc: sum the values of all the geometries that dissolve
+    dissolve = merged.dissolve(by="index_right", aggfunc={'n_value': 'sum'})
 
     #Put this into cell
     grid_gdf.loc[dissolve.index, 'n_value'] = dissolve.n_value.values
@@ -547,42 +555,15 @@ def mbu_wege(roi, gdf, grid_gdf, transform="square-root"):
     df['wege_i'] = df['sq_we']*df['ER']
     
     #Function that calculates the sum of the individual wege_i values of all species of overlapping geometries
-    def sum_values(gdf):
-        #main source: https://stackoverflow.com/questions/65073549/combine-and-sum-values-of-overlapping-polygons-in-geopandas
-
-        #The explode() method converts each element of the specified column(s) into a row
-        #This is useful if there are multipolygons
-        new_gdf = gdf.explode('geometry')
-
-        #convert all polygons to lines and perform union
-        lines = unary_union(linemerge([geom.exterior for geom in new_gdf.geometry]))
-
-        #convert again to (smaller) intersecting polygons and to geodataframe
-        polygons = list(polygonize(lines))
-        intersects = gpd.GeoDataFrame({'geometry': polygons}, crs="EPSG:4326")
-
-        #to fix invalid geometries
-        intersects['geometry'] = intersects['geometry'].buffer(0)
-
-        #Perform sjoin with original geoframe to get overlapping polygons.
-        #Afterwards group per intersecting polygon to perform (arbitrary) aggregation
-        intersects['sum_overlaps'] = (intersects
-                                .sjoin(new_gdf, predicate='within')
-                                .reset_index()
-                                .groupby(['level_0', 'index_right0'])
-                                .head(1)
-                                .groupby('level_0')
-                                .wege_i.sum())
-        return intersects
-    #Call the sum_values function
-    overlap_wege_v = sum_values(df)
+    overlap_wege_v = sum_values(df,'wege_i')
     
     #Merged the log_dist2 values of overlapping geometries with the grid gdf
     merged = gpd.sjoin(overlap_wege_v, grid_gdf, how='left')
     merged['n_value']= overlap_wege_v['sum_overlaps']
 
-    #Compute stats per grid cell
-    dissolve = merged.dissolve(by="index_right", aggfunc="sum")
+    # Compute stats per grid cell
+    #aggfunc: sum the values of all the geometries that dissolve
+    dissolve = merged.dissolve(by="index_right", aggfunc={'n_value': 'sum'})
 
     #Put this into cell
     grid_gdf.loc[dissolve.index, 'n_value'] = dissolve.n_value.values
@@ -624,7 +605,8 @@ def mbu_habitats_survey(roi, path_EFG, grid_gdf):
     merged2['n_habitats']= overlap_geo['count_intersections']
 
     # Compute stats per grid cell
-    dissolve = merged2.dissolve(by="index_right")#, aggfunc="count")
+    #aggfunc: select the max value of all the geometries that dissolve
+    dissolve = merged.dissolve(by="index_right", aggfunc={'n_value': 'max'})
 
     # put this into cell
     grid_gdf.loc[dissolve.index, 'n_habitats'] = dissolve.n_habitats.values
@@ -639,7 +621,3 @@ def mbu_habitats_survey(roi, path_EFG, grid_gdf):
     grid_gdf['mbu_habitat_survey'] = normalized_factor*grid_gdf['area_sqkm']
     
     return grid_gdf
-    
-    
-
-
