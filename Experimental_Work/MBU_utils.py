@@ -368,7 +368,7 @@ def mbu_species_richness(roi, gdf, grid_gdf):
     #Join in a gdf all the geometries within ROI
     df2 = gpd.clip(gdf.set_crs(epsg=4326, allow_override=True), roi)
     
-    #Count the number of overlappong geometries from joined gdf
+    #Count the number of overlappong geometries
     overlap_geo = count_overlapping_geometries(df2)
     
     #This is to count how many geometries are in each grid 
@@ -377,7 +377,7 @@ def mbu_species_richness(roi, gdf, grid_gdf):
 
     # Compute stats per grid cell
     #aggfunc: sum the values of all the geometries that dissolve
-    dissolve = merged.dissolve(by="index_right", aggfunc={'n_species': 'sum'})
+    dissolve = merged.dissolve(by="index_right", aggfunc={'n_species': 'max'})
 
     # put this into cell
     grid_gdf.loc[dissolve.index, 'n_species'] = dissolve.n_habitats.values
