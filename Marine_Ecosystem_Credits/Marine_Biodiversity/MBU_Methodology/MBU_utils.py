@@ -6,6 +6,7 @@ import pandas as pd
 
 import shapely
 import geopandas as gpd
+from geopandas.tools import sjoin
 from shapely.geometry import Polygon, Point, box
 from shapely.ops import linemerge, unary_union, polygonize
 
@@ -179,12 +180,14 @@ def count_overlapping_geometries(gdf):
 #---------------------------------------------------------------------------------------------------------------------
 
 #This function calculates the sum of all values of an interest colum of overlapping geometries 
-def sum_values(gdf, gdf_col_name):
+def map_algebra(gdf, gdf_col_name, operation):
     """
     This function calculates the sum of all values of an interest colum of overlapping geometries 
     Input:
     gdf <geopandas dataframe>: consists of polygons
-    colum_name <string>: column name that has the value that we want to sum
+    gdf_col_name <string>: column name that has the value that we want to apply the algebra operation
+    operation <string>: algebra operation
+                      : options ('sum','mean','max','min','prod')
 
     Output:
     gdf <geopandas dataframe>: consists of polygons with a new colum with a summation of interest values
@@ -208,13 +211,50 @@ def sum_values(gdf, gdf_col_name):
 
     #Perform sjoin with original geoframe to get overlapping polygons.
     #Afterwards group per intersecting polygon to perform (arbitrary) aggregation
-    intersects['sum_overlaps'] = (intersects
-                            .sjoin(new_gdf, predicate='within')
-                            .reset_index()
-                            .groupby(['level_0', 'index_right0'])
-                            .head(1)
-                            .groupby('level_0')
-                            .new_colum.sum())
+    
+    if operation == 'sum':
+        intersects['algebra_overlaps'] = (intersects
+                                      .sjoin(new_gdf, predicate='within')
+                                      .reset_index()
+                                      .groupby(['level_0', 'index_right0'])
+                                      .head(1)
+                                      .groupby('level_0')
+                                      .new_colum.sum())
+    elif operation == 'mean':
+        intersects['algebra_overlaps'] = (intersects
+                                      .sjoin(new_gdf, predicate='within')
+                                      .reset_index()
+                                      .groupby(['level_0', 'index_right0'])
+                                      .head(1)
+                                      .groupby('level_0')
+                                      .new_colum.mean())
+    elif operation == 'max':
+        intersects['algebra_overlaps'] = (intersects
+                                      .sjoin(new_gdf, predicate='within')
+                                      .reset_index()
+                                      .groupby(['level_0', 'index_right0'])
+                                      .head(1)
+                                      .groupby('level_0')
+                                      .new_colum.max())
+    elif operation == 'min':
+        intersects['algebra_overlaps'] = (intersects
+                                      .sjoin(new_gdf, predicate='within')
+                                      .reset_index()
+                                      .groupby(['level_0', 'index_right0'])
+                                      .head(1)
+                                      .groupby('level_0')
+                                      .new_colum.min())
+    elif operation == 'prod':
+        intersects['algebra_overlaps'] = (intersects
+                                      .sjoin(new_gdf, predicate='within')
+                                      .reset_index()
+                                      .groupby(['level_0', 'index_right0'])
+                                      .head(1)
+                                      .groupby('level_0')
+                                      .new_colum.prod())
+    else:
+        raise ValueError("Unsupported operation: {}".format(operation))
+    
     return intersects
 
 #---------------------------------------------------------------------------------------------------------------------
@@ -258,9 +298,11 @@ def Clip_EFG(roi, path_EFG):
 #---------------------------------------------------------------------------------------------------------------------
 #Shannon Index
 #---------------------------------------------------------------------------------------------------------------------
-
 def shannon(roi, gdf, grid_gdf, gdf_col_name):
     """
+    This function calculates the Shannon Index per grid cell and its corresponding MBU value
+    pi = (n/N): where n is the abundance number per species and N is the total abundance number in the dataset 
+    
     input(s):
     roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
     gdf <geopandas dataframe>: contains at least the name of the species, the distribution polygons of each of them 
@@ -270,7 +312,7 @@ def shannon(roi, gdf, grid_gdf, gdf_col_name):
     gdf_col_name <string>: corresponds to the name of the abundance information column in the gdf
     
     output(s):
-    gdf <geopandas dataframe>: with an additional columns ('mbu_shannon';'mub_simpson') containing the number
+    gdf <geopandas dataframe>: with an additional column ('mbu_habitat_survey') containing the number
                              : of units for that grid or geometry
     """
     
@@ -278,15 +320,11 @@ def shannon(roi, gdf, grid_gdf, gdf_col_name):
     gdf = gpd.clip(gdf.set_crs(epsg=4326, allow_override=True), roi)
 
     #This function calculates the sum of all abundances of overlapping species
-    overlap = sum_values(gdf, str(gdf_col_name))
+    overlap = map_algebra(gdf, gdf_col_name, 'sum')
 
     #Merged the overlap values of overlapping geometries with the grid gdf
     merged = gpd.sjoin(overlap, grid_gdf, how='left')
-    merged['n_value'] = overlap['sum_overlaps']
-    
-    #for Shannon calculations
-    #calculates the Shannon Index per grid cell and its corresponding MBU value
-    #pi = (n/N): where n is the abundance number per species and N is the total abundance number in the dataset 
+    merged['n_value'] = overlap['algebra_overlaps']
     
     #Calculate the pi value per row
     pi = merged['n_value']/np.sum(merged['n_value'])
@@ -301,6 +339,9 @@ def shannon(roi, gdf, grid_gdf, gdf_col_name):
 
     #Put this into cell
     grid_gdf.loc[dissolve.index, 'Shannon'] = dissolve.pilogpi.values
+
+    #Normalization factor
+    Norm_factor = grid_gdf['Shannon']/grid_gdf['Shannon'].max()
     
     return grid_gdf
 
@@ -308,49 +349,7 @@ def shannon(roi, gdf, grid_gdf, gdf_col_name):
 #Simpson Index
 #---------------------------------------------------------------------------------------------------------------------
 
-def simpson(roi, gdf, grid_gdf, gdf_col_name):
-    """
-    input(s):
-    roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
-    gdf <geopandas dataframe>: contains at least the name of the species, the distribution polygons of each of them 
-                             :and their abundance
-    grid_gdf <geopandas dataframe>: consists of polygons of grids typically generated by the gridding function
-                                  : containts at least a geometry column and a unique grid_id
-    gdf_col_name <string>: corresponds to the name of the abundance information column in the gdf
-    
-    output(s):
-    gdf <geopandas dataframe>: with an additional columns ('mbu_shannon';'mub_simpson') containing the number
-                             : of units for that grid or geometry
-    """
-    
-    #Join in a gdf all the geometries within ROI
-    gdf = gpd.clip(gdf.set_crs(epsg=4326, allow_override=True), roi)
 
-    #This function calculates the sum of all abundances of overlapping species
-    overlap = sum_values(gdf, str(gdf_col_name))
-
-    #Merged the overlap values of overlapping geometries with the grid gdf
-    merged = gpd.sjoin(overlap, grid_gdf, how='left')
-    merged['n_value'] = overlap['sum_overlaps']
-    
-    #for Simpson calculations
-    #Calculate the Simpson Index per grid cell and its corresponding MBU value
-    
-    #Calculate the numerator and denominator needed per row
-    num = merged['n_value']*(merged['n_value']-1)
-    den = np.sum(merged['n_value'])*(np.sum(merged['n_value'])-1)
-    merged['num'] = num
-
-    #Dissolve the DataFrame by 'index_right' and aggregate using the calculated Shannon entropy
-    dissolve = merged.dissolve(by="index_right", aggfunc={'num': 'sum'})
-    
-    #Calculate the Shannon index per grid
-    dissolve['simpson'] = 1-(dissolve['num']/den)
-
-    #Put this into cell
-    grid_gdf.loc[dissolve.index, 'Simpson'] = dissolve.simpson.values
-    
-    return grid_gdf
 
 #---------------------------------------------------------------------------------------------------------------------
 #Species Richness
@@ -422,49 +421,34 @@ def mbu_endemism(roi, gdf, grid_gdf, transform="log"):
     #Calculate the portion of the area covered by each species in roi with respect to its global distribution
     dist_ratio2 = np.round(df2.area/gdf.area, decimals=4, out=None)
     
-    if transform == "none":
-        
-        #Add these values into the new gdf
-        df2["dist_ratio2"] = dist_ratio2
-        
-        #Function that calculates the sum of the individual log_dist2 values of all species of overlapping geometries
-        overlap_endemic_v = sum_values(df2,'dist_ratio2')
-        
-    elif transform == "log":
-        
-        #Calculate the log of that ratio
-        log_dist2 = 1/(-np.log2(dist_ratio2)+0.1)
+    #Calculate the log of that ratio
+    log_dist2 = 1/(-np.log2(dist_ratio2)+0.1)
     
-        #Add these values into the new gdf
-        df2["log_dist2"] = log_dist2
+    #Add these values into the new gdf
+    df2["DistRatio2"] = dist_ratio2
+    df2["log_dist2"] = log_dist2
     
-        #Function that calculates the sum of the individual log_dist2 values of all species of overlapping geometries
-        overlap_endemic_v = sum_values(df2,'log_dist2')
-        
-    elif transform == "square-root":
-            
-        #Calculate the log of that ratio
-        sqroot_dist2 = dist_ratio2**0.5
-    
-        #Add these values into the new gdf
-        df2["sqroot_dist2"] = sqroot_dist2
-    
-        #Function that calculates the sum of the individual log_dist2 values of all species of overlapping geometries
-        overlap_endemic_v = sum_values(df2,'sqroot_dist2')       
-        
-    else:
-        raise Exception("Specify a none, log or square as the transformation.")
+    #Function that calculates the sum of the individual log_dist2 values of all species of overlapping geometries
+    overlap_endemic_v = map_algebra(gdf, 'log_dist2', 'sum')
     
     #Merged the log_dist2 values of overlapping geometries with the grid gdf
     merged = gpd.sjoin(overlap_endemic_v, grid_gdf, how='left')
-    merged['n_value']= overlap_endemic_v['sum_overlaps']
+    merged['n_value']= overlap_endemic_v['algebra_overlaps']
 
     # Compute stats per grid cell
     #aggfunc: sum the values of all the geometries that dissolve
     dissolve = merged.dissolve(by="index_right", aggfunc={'n_value': 'sum'})
 
     #Put this into cell
-    grid_gdf.loc[dissolve.index, 'endemism'] = dissolve.n_value.values
+    grid_gdf.loc[dissolve.index, 'n_value'] = dissolve.n_value.values
+    
+    #Convert area from degrees to square kilometers
+    #this case apply only for Central America
+    #https://epsg.io/31970
+    grid_gdf['area_sqkm'] = (grid_gdf.to_crs(crs=31970).area)*10**(-6)
+
+    #Calculate the MBUS from the endemic MF
+    grid_gdf['mbu_endemism'] = grid_gdf['n_value']*grid_gdf['area_sqkm']
     
     return grid_gdf
     
@@ -573,11 +557,11 @@ def mbu_wege(roi, gdf, grid_gdf, transform="square-root"):
     df['wege_i'] = df['sq_we']*df['ER']
     
     #Function that calculates the sum of the individual wege_i values of all species of overlapping geometries
-    overlap_wege_v = sum_values(df,'wege_i')
+    overlap_wege_v = map_algebra(df, 'wege_i', 'sum')
     
     #Merged the log_dist2 values of overlapping geometries with the grid gdf
     merged = gpd.sjoin(overlap_wege_v, grid_gdf, how='left')
-    merged['n_value']= overlap_wege_v['sum_overlaps']
+    merged['n_value']= overlap_wege_v['algebra_overlaps']
 
     # Compute stats per grid cell
     #aggfunc: sum the values of all the geometries that dissolve

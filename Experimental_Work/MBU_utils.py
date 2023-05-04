@@ -6,11 +6,12 @@ import pandas as pd
 
 import shapely
 import geopandas as gpd
+from geopandas.tools import sjoin
 from shapely.geometry import Polygon, Point, box
 from shapely.ops import linemerge, unary_union, polygonize
 
 #---------------------------------------------------------------------------------------------------------------------
-#Gridding Function
+#High Level Helper Functions
 #---------------------------------------------------------------------------------------------------------------------
 
 def create_grid(roi, grid_shape="hexagon", grid_size_deg=1.):
@@ -111,8 +112,6 @@ geopandas frame
     return grid
 
 #---------------------------------------------------------------------------------------------------------------------
-#Overlapping Geometry Accounting
-#---------------------------------------------------------------------------------------------------------------------
 
 def count_overlapping_geometries(gdf):
     #main source: https://gis.stackexchange.com/questions/387773/count-overlapping-features-using-geopandas
@@ -175,16 +174,16 @@ def count_overlapping_geometries(gdf):
     return new_gdf
 
 #---------------------------------------------------------------------------------------------------------------------
-#Summation Values of Overlapping Geometries
-#---------------------------------------------------------------------------------------------------------------------
 
 #This function calculates the sum of all values of an interest colum of overlapping geometries 
-def sum_values(gdf, gdf_col_name):
+def map_algebra(gdf, gdf_col_name, operation):
     """
     This function calculates the sum of all values of an interest colum of overlapping geometries 
     Input:
     gdf <geopandas dataframe>: consists of polygons
-    colum_name <string>: column name that has the value that we want to sum
+    gdf_col_name <string>: column name that has the value that we want to apply the algebra operation
+    operation <string>: algebra operation
+                      : options ('sum','mean','max','min','prod')
 
     Output:
     gdf <geopandas dataframe>: consists of polygons with a new colum with a summation of interest values
@@ -208,17 +207,52 @@ def sum_values(gdf, gdf_col_name):
 
     #Perform sjoin with original geoframe to get overlapping polygons.
     #Afterwards group per intersecting polygon to perform (arbitrary) aggregation
-    intersects['sum_overlaps'] = (intersects
-                            .sjoin(new_gdf, predicate='within')
-                            .reset_index()
-                            .groupby(['level_0', 'index_right0'])
-                            .head(1)
-                            .groupby('level_0')
-                            .new_colum.sum())
+    
+    if operation == 'sum':
+        intersects['algebra_overlaps'] = (intersects
+                                      .sjoin(new_gdf, predicate='within')
+                                      .reset_index()
+                                      .groupby(['level_0', 'index_right0'])
+                                      .head(1)
+                                      .groupby('level_0')
+                                      .new_colum.sum())
+    elif operation == 'mean':
+        intersects['algebra_overlaps'] = (intersects
+                                      .sjoin(new_gdf, predicate='within')
+                                      .reset_index()
+                                      .groupby(['level_0', 'index_right0'])
+                                      .head(1)
+                                      .groupby('level_0')
+                                      .new_colum.mean())
+    elif operation == 'max':
+        intersects['algebra_overlaps'] = (intersects
+                                      .sjoin(new_gdf, predicate='within')
+                                      .reset_index()
+                                      .groupby(['level_0', 'index_right0'])
+                                      .head(1)
+                                      .groupby('level_0')
+                                      .new_colum.max())
+    elif operation == 'min':
+        intersects['algebra_overlaps'] = (intersects
+                                      .sjoin(new_gdf, predicate='within')
+                                      .reset_index()
+                                      .groupby(['level_0', 'index_right0'])
+                                      .head(1)
+                                      .groupby('level_0')
+                                      .new_colum.min())
+    elif operation == 'prod':
+        intersects['algebra_overlaps'] = (intersects
+                                      .sjoin(new_gdf, predicate='within')
+                                      .reset_index()
+                                      .groupby(['level_0', 'index_right0'])
+                                      .head(1)
+                                      .groupby('level_0')
+                                      .new_colum.prod())
+    else:
+        raise ValueError("Unsupported operation: {}".format(operation))
+    
     return intersects
 
-#---------------------------------------------------------------------------------------------------------------------
-#Clip Function for EFG
 #---------------------------------------------------------------------------------------------------------------------
 
 def Clip_EFG(roi, path_EFG):
@@ -253,13 +287,11 @@ def Clip_EFG(roi, path_EFG):
     
     return joined
 
-#MODULATING FACTORS FUNCTIONS
-
 #---------------------------------------------------------------------------------------------------------------------
-#Normalize Biodiversity Score
+#Indices and metrics functions
 #---------------------------------------------------------------------------------------------------------------------
 
-def mbu_normalize_biodiversity_score(roi, gdf, grid_gdf, gdf_col_name):
+def shannon(roi, gdf, grid_gdf, gdf_col_name):
     """
     input(s):
     roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
@@ -270,19 +302,19 @@ def mbu_normalize_biodiversity_score(roi, gdf, grid_gdf, gdf_col_name):
     gdf_col_name <string>: corresponds to the name of the abundance information column in the gdf
     
     output(s):
-    gdf <geopandas dataframe>: with an additional columns ('mbu_shannon';'mub_simpson') containing the number
-                             : of units for that grid or geometry
+    gdf <geopandas dataframe>: with an additional column ('shannon') containing the calculation of that index per grid
+                             : or geometry
     """
     
     #Join in a gdf all the geometries within ROI
     gdf = gpd.clip(gdf.set_crs(epsg=4326, allow_override=True), roi)
 
     #This function calculates the sum of all abundances of overlapping species
-    overlap = sum_values(gdf, str(gdf_col_name))
+    overlap = map_algebra(gdf, gdf_col_name, 'sum')
 
     #Merged the overlap values of overlapping geometries with the grid gdf
     merged = gpd.sjoin(overlap, grid_gdf, how='left')
-    merged['n_value'] = overlap['sum_overlaps']
+    merged['n_value'] = overlap['algebra_overlaps']
     
     #for Shannon calculations
     #calculates the Shannon Index per grid cell and its corresponding MBU value
@@ -301,20 +333,35 @@ def mbu_normalize_biodiversity_score(roi, gdf, grid_gdf, gdf_col_name):
 
     #Put this into cell
     grid_gdf.loc[dissolve.index, 'Shannon'] = dissolve.pilogpi.values
+    
+    return grid_gdf
 
-    #Normalization factor
-    Norm_factor = grid_gdf['Shannon']/grid_gdf['Shannon'].max()
+#---------------------------------------------------------------------------------------------------------------------
 
-    #Convert area from degrees to square kilometers
-    #this case apply only for Central America
-    #https://epsg.io/31970
-    grid_gdf['area_sqkm'] = (grid_gdf.to_crs(crs=31970).area)*10**(-6)
+def simpson(roi, gdf, grid_gdf, gdf_col_name):
+    """
+    input(s):
+    roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
+    gdf <geopandas dataframe>: contains at least the name of the species, the distribution polygons of each of them 
+                             :and their abundance
+    grid_gdf <geopandas dataframe>: consists of polygons of grids typically generated by the gridding function
+                                  : containts at least a geometry column and a unique grid_id
+    gdf_col_name <string>: corresponds to the name of the abundance information column in the gdf
+    
+    output(s):
+    gdf <geopandas dataframe>: with an additional columns ('simpson') containing the calculation of that index per grid
+                             : or geometry
+    """
+    
+    #Join in a gdf all the geometries within ROI
+    gdf = gpd.clip(gdf.set_crs(epsg=4326, allow_override=True), roi)
 
-    #Calculate the MBUS from the endemic MF without a normalization factor
-    grid_gdf['mbu_shannon'] = grid_gdf['Shannon']*grid_gdf['area_sqkm']
+    #This function calculates the sum of all abundances of overlapping species
+    overlap = map_algebra(gdf, gdf_col_name, 'sum')
 
-    #Calculate the MBUS from the endemic MF with a normalization factor
-    grid_gdf['mbu_shannon_n'] = Norm_factor*grid_gdf['area_sqkm']
+    #Merged the overlap values of overlapping geometries with the grid gdf
+    merged = gpd.sjoin(overlap, grid_gdf, how='left')
+    merged['n_value'] = overlap['algebra_overlaps']
     
     #for Simpson calculations
     #Calculate the Simpson Index per grid cell and its corresponding MBU value
@@ -332,72 +379,65 @@ def mbu_normalize_biodiversity_score(roi, gdf, grid_gdf, gdf_col_name):
 
     #Put this into cell
     grid_gdf.loc[dissolve.index, 'Simpson'] = dissolve.simpson.values
-
-    #Normalization factor
-    Norm_factor = grid_gdf['Simpson']/grid_gdf['Simpson'].max()
-
-    #Convert area from degrees to square kilometers
-    #this case apply only for Central America
-    #https://epsg.io/31970
-    grid_gdf['area_sqkm'] = (grid_gdf.to_crs(crs=31970).area)*10**(-6)
-
-    #Calculate the MBUS from the endemic MF without a normalization factor
-    grid_gdf['mbu_simpson'] = grid_gdf['Simpson']*grid_gdf['area_sqkm']
-
-    #Calculate the MBUS from the endemic MF with a normalization factor
-    grid_gdf['mbu_simpson_n'] = Norm_factor*grid_gdf['area_sqkm']
     
     return grid_gdf
 
 #---------------------------------------------------------------------------------------------------------------------
-#Species Richness
-#---------------------------------------------------------------------------------------------------------------------
 
-def mbu_species_richness(roi, gdf, grid_gdf):
+def species_richness(roi, df, grid_gdf, source):
     """
     inputs:
     roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
-    gdf <geopandas dataframe>: contains at least the name of the species and the distribution polygons of each of them
-    grid_gdf <geopandas dataframe>: consists of polygons of grids typically generated by the gridding function
-                                  : containts atleast a geometry column and a unique grid_id
+    df <geopandas dataframe>: contains at least the name of the species and the distribution polygons of each of them
+    gdf <geopandas dataframe>: contains at least the name of the species and either
+                            i) the distribution polygons of each of them or (presumbaly from IUCN or local surveys),
+                            ii) points denoting the observations of each species - repeated observations for the same species
+
     output(s):
-    gdf <geopandas dataframe>: with an additional column ('mbu_habitat_survey') containing the number
-                             : of units for that grid or geometry
+    gdf <geopandas dataframe>: with an additional column ('species_richness') containing the calculation of this factor 
+                             : per grid or geometry
     """
     
-    #Join in a gdf all the geometries within ROI
-    df2 = gpd.clip(gdf.set_crs(epsg=4326, allow_override=True), roi)
-    
-    #Count the number of overlappong geometries
-    overlap_geo = count_overlapping_geometries(df2)
-    
-    #This is to count how many geometries are in each grid 
-    merged = gpd.sjoin(overlap_geo, grid_gdf, how='left')
-    merged['n_species']= overlap_geo['count_intersections']
+    if source == 'obis':
+        # convert OBIS dataframe to geodataframe
+        obis = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.decimalLongitude, df.decimalLatitude))
+        
+        #Join in a gdf all the geometries within ACMC
+        gdf = gpd.clip(obis.set_crs(epsg=4326, allow_override=True), roi.set_crs(epsg=4326, allow_override=True))
+        
+        #Spatial join of gdf and grid_gdf
+        pointInPolys = sjoin(gdf, grid_gdf, how='right')
+        new = pointInPolys.groupby(['Grid_ID']).size().reset_index(name='count')
+        
+        #Added count colum in the grid geodataframe
+        grid_gdf['species_richness'] = new['count']
 
-    # Compute stats per grid cell
-    #aggfunc: sum the values of all the geometries that dissolve
-    dissolve = merged.dissolve(by="index_right", aggfunc={'n_species': 'max'})
+    elif source == 'IUCN':
+        #Join in a gdf all the geometries within ACMC
+        df2 = gpd.clip(df.set_crs(epsg=4326, allow_override=True), roi.set_crs(epsg=4326, allow_override=True))
+        
+        #Count the number of overlapping geometries 
+        overlap = count_overlapping_geometries(df2)
+        
+        #To count how many geometries are in each grid
+        merged = gpd.sjoin(overlap, grid_gdf, how='left')
+        merged['n_species']= overlap['count_intersections']
+        
+        # Compute stats per grid cell
+        #aggfunc: assigne the max value of all the geometries that dissolve
+        dissolve = merged.dissolve(by="index_right", aggfunc={'n_species': 'max'})
 
-    # put this into cell
-    grid_gdf.loc[dissolve.index, 'n_species'] = dissolve.n_habitats.values
-    
-    #Calculate the normalize factor 
-    normalized_factor = grid_gdf['n_species']/grid_gdf['n_species'].max()
-    
-    #Convert area from degrees to square kilometers
-    #this case apply only for Central America
-    #https://epsg.io/31970
-    grid_gdf['area_sqkm'] = (grid_gdf.to_crs(crs=31970).area)*10**(-6)
-    grid_gdf['mbu_species_richness'] = normalized_factor*grid_gdf['area_sqkm']
+        # put this into cell
+        grid.loc[dissolve.index,'species_richness'] = dissolve.n_species.values
+        
+    else:
+        raise ValueError("Unsupported source: {}".format(operation))
     
     return grid_gdf
 
 #---------------------------------------------------------------------------------------------------------------------
-#Endemism
-#---------------------------------------------------------------------------------------------------------------------
 
-def mbu_endemism(roi, gdf, grid_gdf, transform="log"):
+def endemism(roi, gdf, grid_gdf):
     """
     inputs:
     roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
@@ -409,8 +449,8 @@ def mbu_endemism(roi, gdf, grid_gdf, transform="log"):
                    : else 1/(-Log2(score))
                
     output(s):
-    gdf <geopandas dataframe>: with an additional column ('mbu_endemism') containing the number
-                             :of units for that grid or geometry
+    gdf <geopandas dataframe>: with an additional column ('endemism') containing the calculation of this factor per grid
+                             : or geometry
     """
     
     #Polygons of species distribution to be clipped to roi
@@ -427,34 +467,24 @@ def mbu_endemism(roi, gdf, grid_gdf, transform="log"):
     df2["log_dist2"] = log_dist2
     
     #Function that calculates the sum of the individual log_dist2 values of all species of overlapping geometries
-    overlap_endemic_v = sum_values(df2,'log_dist2')
+    overlap_endemic_v = map_algebra(df2, 'log_dist2', 'sum')
     
     #Merged the log_dist2 values of overlapping geometries with the grid gdf
     merged = gpd.sjoin(overlap_endemic_v, grid_gdf, how='left')
-    merged['n_value']= overlap_endemic_v['sum_overlaps']
+    merged['n_value']= overlap_endemic_v['algebra_overlaps']
 
     # Compute stats per grid cell
     #aggfunc: sum the values of all the geometries that dissolve
     dissolve = merged.dissolve(by="index_right", aggfunc={'n_value': 'sum'})
 
     #Put this into cell
-    grid_gdf.loc[dissolve.index, 'n_value'] = dissolve.n_value.values
-    
-    #Convert area from degrees to square kilometers
-    #this case apply only for Central America
-    #https://epsg.io/31970
-    grid_gdf['area_sqkm'] = (grid_gdf.to_crs(crs=31970).area)*10**(-6)
-
-    #Calculate the MBUS from the endemic MF
-    grid_gdf['mbu_endemism'] = grid_gdf['n_value']*grid_gdf['area_sqkm']
+    grid_gdf.loc[dissolve.index, 'endemism'] = dissolve.n_value.values
     
     return grid_gdf
-    
-#---------------------------------------------------------------------------------------------------------------------    
-#WEGE
+ 
 #---------------------------------------------------------------------------------------------------------------------
 
-def mbu_wege(roi, gdf, grid_gdf, transform="square-root"):
+def wege(roi, gdf, grid_gdf):
     """
     inputs:
     roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
@@ -467,8 +497,8 @@ def mbu_wege(roi, gdf, grid_gdf, transform="square-root"):
                    : else 1/(-Log2(score))
                
     output(s):
-    gdf <geopandas dataframe>: with an additional column ('mbu_wege') containing the number
-                             :of units for that grid or geometry
+    gdf <geopandas dataframe>: with an additional column ('wege') containing the calculation of this factor per grid
+                             : or geometry
     """
 
     def extinction_risk(cat: str = None) -> float:
@@ -555,34 +585,24 @@ def mbu_wege(roi, gdf, grid_gdf, transform="square-root"):
     df['wege_i'] = df['sq_we']*df['ER']
     
     #Function that calculates the sum of the individual wege_i values of all species of overlapping geometries
-    overlap_wege_v = sum_values(df,'wege_i')
+    overlap_wege_v = map_algebra(df, 'wege_i', 'sum')
     
     #Merged the log_dist2 values of overlapping geometries with the grid gdf
     merged = gpd.sjoin(overlap_wege_v, grid_gdf, how='left')
-    merged['n_value']= overlap_wege_v['sum_overlaps']
+    merged['n_value']= overlap_wege_v['algebra_overlaps']
 
     # Compute stats per grid cell
     #aggfunc: sum the values of all the geometries that dissolve
     dissolve = merged.dissolve(by="index_right", aggfunc={'n_value': 'sum'})
 
     #Put this into cell
-    grid_gdf.loc[dissolve.index, 'n_value'] = dissolve.n_value.values
-    
-    #Convert area from degrees to square kilometers
-    #this case apply only for Central America
-    #https://epsg.io/31970
-    grid_gdf['area_sqkm'] = (grid_gdf.to_crs(crs=31970).area)*10**(-6)
-    
-    #Calculate the MBUS from the WEGE MF
-    grid_gdf['mbu_wege'] = grid_gdf['n_value']*grid_gdf['area_sqkm']
+    grid_gdf.loc[dissolve.index, 'wege'] = dissolve.n_value.values
     
     return grid_gdf
     
 #---------------------------------------------------------------------------------------------------------------------    
-#Habitats Survey
-#---------------------------------------------------------------------------------------------------------------------
 
-def mbu_habitats_survey(roi, path_EFG, grid_gdf):
+def habitats_survey(roi, grid_gdf, path_EFG):
     """
     inputs:
     roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
@@ -601,23 +621,201 @@ def mbu_habitats_survey(roi, path_EFG, grid_gdf):
     overlap_geo = count_overlapping_geometries(joined)
     
     #This is to count how many geometries are in each grid 
-    merged2 = gpd.sjoin(overlap_geo, grid_gdf, how='left')
-    merged2['n_habitats']= overlap_geo['count_intersections']
+    merged = gpd.sjoin(overlap_geo, grid_gdf, how='left')
+    merged['n_habitats']= overlap_geo['count_intersections']
 
     # Compute stats per grid cell
     #aggfunc: select the max value of all the geometries that dissolve
-    dissolve = merged.dissolve(by="index_right", aggfunc={'n_value': 'max'})
+    dissolve = merged.dissolve(by="index_right", aggfunc={'n_habitats': 'max'})
 
     # put this into cell
-    grid_gdf.loc[dissolve.index, 'n_habitats'] = dissolve.n_habitats.values
-    
-    #Calculate the normalize factor 
-    normalized_factor = grid_gdf['n_habitats']/grid_gdf['n_habitats'].max()
-    
-    #Convert area from degrees to square kilometers
-    #this case apply only for Central America
-    #https://epsg.io/31970
-    grid_gdf['area_sqkm'] = (grid_gdf.to_crs(crs=31970).area)*10**(-6)
-    grid_gdf['mbu_habitat_survey'] = normalized_factor*grid_gdf['area_sqkm']
+    grid_gdf.loc[dissolve.index, 'habitats_survey'] = dissolve.n_habitats.values
     
     return grid_gdf
+
+#---------------------------------------------------------------------------------------------------------------------
+#Modulating Factor Functions
+#---------------------------------------------------------------------------------------------------------------------
+
+def mbu_biodiversity_score(roi, gdf, grid_gdf, gdf_col_name, crs_transformation_kms):
+    """
+    input(s):
+    roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
+    gdf <geopandas dataframe>: contains at least the name of the species, the distribution polygons of each of them 
+                             :and their abundance
+    grid_gdf <geopandas dataframe>: consists of polygons of grids typically generated by the gridding function
+                                  : containts at least a geometry column and a unique grid_id
+    gdf_col_name <string>: corresponds to the name of the abundance information column in the gdf
+    crs_transformation_kms: coordinate reference system transformation applied to the roi in meters 
+    
+    output(s):
+    gdf <geopandas dataframe>: with an additional column ('mbu_biodiversity_score') containing the calculation of that index per grid
+                             : or geometry
+    """
+    
+    #Shannon Index calculation
+    df = shannon(roi, gdf, grid_gdf, gdf_col_name)
+    
+    #Simpson Index calculation
+    df = simpson(roi, gdf, grid_gdf, gdf_col_name)
+    
+    #Normalization factor
+    Norm_factor1 = df['Shannon']/df['Shannon'].max()
+    Norm_factor2 = df['Simpson']/df['Simpson'].max()
+    
+    #Convert area from degrees to square kilometers
+    df['area_sqkm'] = (df.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+
+    #Calculate the MBUS from this MF
+    df['mbu_biodiversity_score'] = Norm_factor1*df['area_sqkm'] + Norm_factor2*df['area_sqkm']
+    
+    return df
+
+#---------------------------------------------------------------------------------------------------------------------
+
+def mbu_species_richness(roi, gdf, grid_gdf, source, crs_transformation_kms):
+    """
+    input(s):
+    roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
+    gdf <geopandas dataframe>: contains at least the name of the species, the distribution polygons of each of them 
+                             :and their abundance
+    grid_gdf <geopandas dataframe>: consists of polygons of grids typically generated by the gridding function
+                                  : containts at least a geometry column and a unique grid_id
+    crs_transformation_kms: coordinate reference system transformation applied to the roi in meters 
+    
+    output(s):
+    gdf <geopandas dataframe>: with an additional column ('mbu_species_richness') containing the calculation of that 
+                             : index per grid or geometry
+    """
+    
+    #Species Richness calculation
+    df = species_richness(roi, gdf, grid_gdf, source)
+    
+    #Normalization factor
+    Norm_factor1 = df['species_richness']/df['species_richness'].max()
+    
+    #Convert area from degrees to square kilometers
+    df['area_sqkm'] = (df.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+
+    #Calculate the MBUS from this MF
+    df['mbu_species_richness'] = Norm_factor1*df['area_sqkm']
+    
+    return df
+    
+#---------------------------------------------------------------------------------------------------------------------
+    
+def mbu_endemism(roi, gdf, grid_gdf, crs_transformation_kms):
+    """
+    input(s):
+    roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
+    gdf <geopandas dataframe>: contains at least the name of the species, the distribution polygons of each of them 
+                             :and their abundance
+    grid_gdf <geopandas dataframe>: consists of polygons of grids typically generated by the gridding function
+                                  : containts at least a geometry column and a unique grid_id
+    crs_transformation_kms: coordinate reference system transformation applied to the roi in meters 
+    
+    output(s):
+    gdf <geopandas dataframe>: with an additional column ('mbu_endemism') containing the calculation of that index per grid
+                             : or geometry
+    """
+    
+    #Endemic factor calculation
+    df = endemism(roi, gdf, grid_gdf)
+    
+    #Normalization factor
+    Norm_factor1 = df['endemism']/df['endemism'].max()
+    
+    #Convert area from degrees to square kilometers
+    df['area_sqkm'] = (df.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+
+    #Calculate the MBUS from this MF
+    df['mbu_endemism'] = Norm_factor1*df['area_sqkm']
+    
+    return df
+
+#--------------------------------------------------------------------------------------------------------------------- 
+   
+def mbu_wege(roi, gdf, grid_gdf, crs_transformation_kms):
+    """
+    input(s):
+    roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
+    gdf <geopandas dataframe>: contains at least the name of the species, the distribution polygons of each of them 
+                             :and their abundance
+    grid_gdf <geopandas dataframe>: consists of polygons of grids typically generated by the gridding function
+                                  : containts at least a geometry column and a unique grid_id
+    crs_transformation_kms: coordinate reference system transformation applied to the roi in meters 
+    
+    output(s):
+    gdf <geopandas dataframe>: with an additional column ('mbu_wege') containing the calculation of that index per grid
+                             : or geometry
+    """
+    
+    #Wege factor calculation
+    df = wege(roi, gdf, grid_gdf)
+    
+    #Normalization factor
+    Norm_factor1 = df['wege']/df['wege'].max()
+    
+    #Convert area from degrees to square kilometers
+    df['area_sqkm'] = (df.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+
+    #Calculate the MBUS from this MF
+    df['mbu_wege'] = Norm_factor1*df['area_sqkm']
+    
+    return df
+
+#---------------------------------------------------------------------------------------------------------------------
+
+def mbu_habitats_survey(roi, grid_gdf, path_EFG, crs_transformation_kms):
+    """
+    inputs:
+    roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
+    list_EFG <list>: consist in a list with path location of each EFG file 
+    grid_gdf <geopandas dataframe>: consists of polygons of grids typically generated by the gridding function
+                                  : containts atleast a geometry column and a unique grid_id
+    crs_transformation_kms: coordinate reference system transformation applied to the roi in meters 
+    
+    output(s):
+    gdf <geopandas dataframe>: with an additional column ('mbu_habitats_survey') containing the number
+                             : of units for that grid or geometry
+    """
+    
+    #Wege factor calculation
+    df = habitats_survey(roi, grid_gdf, path_EFG)
+    
+    #Normalization factor
+    Norm_factor1 = df['habitats_survey']/df['habitats_survey'].max()
+    
+    #Convert area from degrees to square kilometers
+    df['area_sqkm'] = (df.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+
+    #Calculate the MBUS from this MF
+    df['mbu_habitats_survey'] = Norm_factor1*df['area_sqkm']
+    
+    return df
+
+#---------------------------------------------------------------------------------------------------------------------
+#General MBU function
+#---------------------------------------------------------------------------------------------------------------------
+
+def give_mbu_score(modulating_factor_names, roi, grid_size_deg, grid_shape, gdf_col_name, path_EFG, crs_transformation_kms):
+    """
+    inputs:
+    modulating_factor_names<list>: list of names of the modulating factors, e.g. ["species_richness", "habitat_survey"]
+    modulating_factor_names:
+            - biodiversity_score
+            - species_richness
+            - endemism
+            - wege
+            - habitats_survey
+    roi <shapely polygon>: region of interest or the total project area
+    grid_size_deg <int>: size of the grid in degrees. Minimum values are enforced
+                     : if grid_size_deg = 0: it means there are no grids
+    grid_shape <str>: either "square" or "hexagonal"
+    gdf_col_name <string>: corresponds to the name of the abundance information column in the gdf
+    path_EFG <list>: consists of a list of EFG polygons' paths to be reference internally
+    crs_transformation_kms: coordinate reference system transformation applied to the roi in meters 
+
+    output(s):
+    geopandas frame
+    """
