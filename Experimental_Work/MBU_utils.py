@@ -309,10 +309,10 @@ def shannon(roi, gdf, grid_gdf, gdf_col_name, source):
     """
     if source == 'obis':
         # convert OBIS dataframe to geodataframe
-        obis = gpd.GeoDataFrame(gdf, geometry=gpd.points_from_xy(df.decimalLongitude, df.decimalLatitude))
+        obis = gpd.GeoDataFrame(gdf, geometry=gpd.points_from_xy(gdf.decimalLongitude, gdf.decimalLatitude))
         
         #Join in a gdf all the geometries within roi
-        gdf = gpd.clip(obis.set_crs(epsg=4326, allow_override=True), roi.set_crs(epsg=4326, allow_override=True))
+        obis = gpd.clip(obis.set_crs(epsg=4326, allow_override=True), roi.set_crs(epsg=4326, allow_override=True))
         
         #Spatial join of gdf and grid_gdf
         pointInPolys = sjoin(obis, grid_gdf, how='inner')
@@ -335,7 +335,9 @@ def shannon(roi, gdf, grid_gdf, gdf_col_name, source):
         new = new.drop(['geometry'], axis = 1)
         
         #Merge with the grid_dgf
-        grid_gdf = new.merge(grid, how='right', on='Grid_ID')
+        new = new.merge(grid_gdf, how='right', on='Grid_ID')
+        
+        grid_gdf = gpd.GeoDataFrame(new)
 
     elif source == 'IUCN':
         #Join in a gdf all the geometries within ROI
@@ -392,13 +394,13 @@ def simpson(roi, gdf, grid_gdf, gdf_col_name, source):
 
     if source == 'obis':
         # convert OBIS dataframe to geodataframe
-        obis = gpd.GeoDataFrame(gdf, geometry=gpd.points_from_xy(df.decimalLongitude, df.decimalLatitude))
+        obis = gpd.GeoDataFrame(gdf, geometry=gpd.points_from_xy(gdf.decimalLongitude, gdf.decimalLatitude))
         
         #Join in a gdf all the geometries within roi
-        gdf = gpd.clip(obis.set_crs(epsg=4326, allow_override=True), roi.set_crs(epsg=4326, allow_override=True))
+        obis = gpd.clip(obis.set_crs(epsg=4326, allow_override=True), roi.set_crs(epsg=4326, allow_override=True))
         
         #Spatial join of gdf and grid_gdf
-        pointInPolys = sjoin(df2, grid, how='inner')
+        pointInPolys = sjoin(obis, grid_gdf, how='inner')
         
         #To count the total abundance number from all the species in a grid
         N = pd.DataFrame()
@@ -420,7 +422,9 @@ def simpson(roi, gdf, grid_gdf, gdf_col_name, source):
         new = new.drop(['geometry'], axis = 1)
         
         #Merge with the grid_dgf
-        grid_gdf = new.merge(grid, how='right', on='Grid_ID')
+        new = new.merge(grid_gdf, how='right', on='Grid_ID')
+        
+        grid_gdf = gpd.GeoDataFrame(new)
 
     elif source == 'IUCN':
         #Join in a gdf all the geometries within ROI
@@ -485,6 +489,8 @@ def species_richness(roi, df, grid_gdf, source):
         
         #Added count colum in the grid geodataframe
         grid_gdf['species_richness'] = new['count']
+        
+        grid_gdf = gpd.GeoDataFrame(grid_gdf)
 
     elif source == 'IUCN':
         #Join in a gdf all the geometries within ACMC
@@ -502,7 +508,7 @@ def species_richness(roi, df, grid_gdf, source):
         dissolve = merged.dissolve(by="index_right", aggfunc={'n_species': 'max'})
 
         # put this into cell
-        grid.loc[dissolve.index,'species_richness'] = dissolve.n_species.values
+        grid_gdf.loc[dissolve.index,'species_richness'] = dissolve.n_species.values
         
     else:
         raise ValueError("Unsupported source: {}".format(operation))
@@ -710,7 +716,7 @@ def habitats_survey(roi, grid_gdf, path_EFG):
 #Modulating Factor Functions
 #---------------------------------------------------------------------------------------------------------------------
 
-def mbu_biodiversity_score(roi, gdf, grid_gdf, gdf_col_name, crs_transformation_kms):
+def mbu_biodiversity_score(roi, gdf, grid_gdf, gdf_col_name, source, crs_transformation_kms):
     """
     input(s):
     roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
@@ -729,17 +735,22 @@ def mbu_biodiversity_score(roi, gdf, grid_gdf, gdf_col_name, crs_transformation_
     """
     
     #Shannon Index calculation
-    df = shannon(roi, gdf, grid_gdf, gdf_col_name, source)
+    df1 = shannon(roi, gdf, grid_gdf, gdf_col_name, source)
     
     #Simpson Index calculation
-    df = simpson(roi, gdf, grid_gdf, gdf_col_name, source)
+    df2 = simpson(roi, gdf, grid_gdf, gdf_col_name, source)
     
     #Normalization factor
-    Norm_factor1 = df['shannon']/df['shannon'].max()
-    Norm_factor2 = df['simpson']/df['simpson'].max()
+    Norm_factor1 = df1['shannon']/df1['shannon'].max()
+    Norm_factor2 = df2['simpson']/df2['simpson'].max()
     
     #Convert area from degrees to square kilometers
-    df['area_sqkm'] = (df.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+    df = gpd.GeoDataFrame()
+    df['area_sqkm'] = (df1.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+    
+    #Add colums
+    df['shannon'] = df1['shannon']
+    df['simpson'] = df2['simpson']
 
     #Calculate the MBUS from this MF
     df['mbu_biodiversity_score'] = Norm_factor1*df['area_sqkm'] + Norm_factor2*df['area_sqkm']
@@ -766,13 +777,14 @@ def mbu_species_richness(roi, gdf, grid_gdf, source, crs_transformation_kms):
     """
     
     #Species Richness calculation
-    df = species_richness(roi, gdf, grid_gdf, source)
+    df1 = species_richness(roi, gdf, grid_gdf, source)
     
     #Normalization factor
-    Norm_factor1 = df['species_richness']/df['species_richness'].max()
+    Norm_factor1 = df1['species_richness']/df1['species_richness'].max()
     
     #Convert area from degrees to square kilometers
-    df['area_sqkm'] = (df.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+    df = gpd.GeoDataFrame()
+    df['area_sqkm'] = (df1.to_crs(crs=crs_transformation_kms).area)*10**(-6)
 
     #Calculate the MBUS from this MF
     df['mbu_species_richness'] = Norm_factor1*df['area_sqkm']
@@ -803,6 +815,7 @@ def mbu_endemism(roi, gdf, grid_gdf, crs_transformation_kms):
     Norm_factor1 = df['endemism']/df['endemism'].max()
     
     #Convert area from degrees to square kilometers
+    df = gpd.DataFrame()
     df['area_sqkm'] = (df.to_crs(crs=crs_transformation_kms).area)*10**(-6)
 
     #Calculate the MBUS from this MF
@@ -834,6 +847,7 @@ def mbu_wege(roi, gdf, grid_gdf, crs_transformation_kms):
     Norm_factor1 = df['wege']/df['wege'].max()
     
     #Convert area from degrees to square kilometers
+    df = gpd.DataFrame()
     df['area_sqkm'] = (df.to_crs(crs=crs_transformation_kms).area)*10**(-6)
 
     #Calculate the MBUS from this MF
@@ -864,10 +878,11 @@ def mbu_habitats_survey(roi, grid_gdf, path_EFG, crs_transformation_kms):
     Norm_factor1 = df['habitats_survey']/df['habitats_survey'].max()
     
     #Convert area from degrees to square kilometers
-    df['area_sqkm'] = (df.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+    df1 = gpd.DataFrame()
+    df1['area_sqkm'] = (df.to_crs(crs=crs_transformation_kms).area)*10**(-6)
 
     #Calculate the MBUS from this MF
-    df['mbu_habitats_survey'] = Norm_factor1*df['area_sqkm']
+    df1['mbu_habitats_survey'] = Norm_factor1*df1['area_sqkm']
     
     return df
 
@@ -875,7 +890,7 @@ def mbu_habitats_survey(roi, grid_gdf, path_EFG, crs_transformation_kms):
 #General MBU function
 #---------------------------------------------------------------------------------------------------------------------
 
-def give_mbu_score(modulating_factor_names, roi, grid_size_deg, grid_shape, gdf_col_name, path_EFG, crs_transformation_kms):
+def give_mbu_score(modulating_factor_names, roi, grid_size_deg, grid_shape, gdf_col_name, path_EFG, source, crs_transformation_kms):
     """
     inputs:
     modulating_factor_names<list>: list of names of the modulating factors, e.g. ["species_richness", "habitat_survey"]
