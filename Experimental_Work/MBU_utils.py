@@ -799,14 +799,14 @@ def mbu_endemism(roi, gdf, grid_gdf, crs_transformation_kms):
     """
     
     #Endemic factor calculation
-    df = endemism(roi, gdf, grid_gdf)
+    df1 = endemism(roi, gdf, grid_gdf)
     
     #Normalization factor
-    Norm_factor1 = df['endemism']/df['endemism'].max()
+    Norm_factor1 = df1['endemism']/df1['endemism'].max()
     
     #Convert area from degrees to square kilometers
-    df = gpd.DataFrame()
-    df['area_sqkm'] = (df.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+    df = gpd.GeoDataFrame()
+    df['area_sqkm'] = (df1.to_crs(crs=crs_transformation_kms).area)*10**(-6)
 
     #Calculate the MBUS from this MF
     df['mbu_endemism'] = Norm_factor1*df['area_sqkm']
@@ -828,16 +828,15 @@ def mbu_wege(roi, gdf, grid_gdf, crs_transformation_kms):
     output(s):
     gdf <geopandas dataframe>: with an additional column ('mbu_wege') containing the calculation of MBUs with this                                              :factor information per grid or geometry
     """
-    
     #Wege factor calculation
-    df = wege(roi, gdf, grid_gdf)
+    df1 = wege(roi, gdf, grid_gdf)
     
     #Normalization factor
-    Norm_factor1 = df['wege']/df['wege'].max()
+    Norm_factor1 = df1['wege']/df1['wege'].max()
     
     #Convert area from degrees to square kilometers
-    df = gpd.DataFrame()
-    df['area_sqkm'] = (df.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+    df = gpd.GeoDataFrame()
+    df['area_sqkm'] = (df1.to_crs(crs=crs_transformation_kms).area)*10**(-6)
 
     #Calculate the MBUS from this MF
     df['mbu_wege'] = Norm_factor1*df['area_sqkm']
@@ -860,17 +859,17 @@ def mbu_habitats_survey(roi, grid_gdf, path_EFG, crs_transformation_kms):
     """
     
     #Wege factor calculation
-    df = habitats_survey(roi, grid_gdf, path_EFG)
+    df1 = habitats_survey(roi, grid_gdf, path_EFG)
     
     #Normalization factor
-    Norm_factor1 = df['habitats_survey']/df['habitats_survey'].max()
+    Norm_factor1 = df1['habitats_survey']/df1['habitats_survey'].max()
     
     #Convert area from degrees to square kilometers
-    df1 = gpd.DataFrame()
-    df1['area_sqkm'] = (df.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+    df = gpd.GeoDataFrame()
+    df['area_sqkm'] = (df1.to_crs(crs=crs_transformation_kms).area)*10**(-6)
 
     #Calculate the MBUS from this MF
-    df1['mbu_habitats_survey'] = Norm_factor1*df1['area_sqkm']
+    df['mbu_habitats_survey'] = Norm_factor1*df['area_sqkm']
     
     return df
 
