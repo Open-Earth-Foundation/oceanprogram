@@ -14,15 +14,17 @@ from shapely.ops import linemerge, unary_union, polygonize
 #High Level Helper Functions
 #---------------------------------------------------------------------------------------------------------------------
 
-def create_grid(roi, grid_shape="hexagon", grid_size_deg=1.):
+def create_grid(MPA, grid_shape="hexagon", grid_size_deg=1.):
     """
-input(s):
-roi <shapely polygon>: region of interest or the total project area
-grid_size_m <int>: size of the grid in degrees
-grid_shape <str>: either "square" or "hexagon"
+    This function make a grid gdf with the shape choose by the user
+    
+    input(s):
+    MPA <shapely polygon>: region of interest or the total project area
+    grid_size_m <int>: size of the grid in degrees
+    grid_shape <str>: either "square" or "hexagon"
 
-output(s):
-geopandas frame
+    output(s):
+    gdf <geopandas dataframe>: containts at least a geometry colum and a unique grid_id
     """
 
     # Slightly displace the minimum and maximum values of the feature extent by creating a buffer
@@ -32,7 +34,7 @@ geopandas frame
     # print("no buffer")
 
     # Get extent of buffered input feature
-    min_x, min_y, max_x, max_y = roi.total_bounds
+    min_x, min_y, max_x, max_y = MPA.total_bounds
 
 
     # Create empty list to hold individual cells that will make up the grid
@@ -116,11 +118,13 @@ geopandas frame
 def count_overlapping_geometries(gdf):
     #main source: https://gis.stackexchange.com/questions/387773/count-overlapping-features-using-geopandas
     """
+    This function calculates the intersections of a list of polygons in a region
+
     input(s):
-    gdf <geopandas dataframe>: consists of polygons
+        gdf <geopandas dataframe>: contains at least a geometry colum with the polygons to count
 
     output(s):
-    gdf <geopandas dataframe>:
+    gdf <geopandas dataframe>: containts at least a geometry colum, a unique grid_id and intersection accounting
     """
     
     #Get the name of the column containing the geometries
@@ -179,6 +183,7 @@ def count_overlapping_geometries(gdf):
 def map_algebra(gdf, gdf_col_name, operation):
     """
     This function calculates the sum of all values of an interest colum of overlapping geometries 
+    
     Input:
     gdf <geopandas dataframe>: consists of polygons
     gdf_col_name <string>: column name that has the value that we want to apply the algebra operation
@@ -255,35 +260,40 @@ def map_algebra(gdf, gdf_col_name, operation):
 
 #---------------------------------------------------------------------------------------------------------------------
 
-def Clip_EFG(roi, path_EFG):
+def Clip_EFG(MPA, path_EFG):
     """
     Inputs: 
-    - roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
+    - MPA <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
     - path_EFG <list>: consists of a list of EFG polygons' paths to be reference internally
     
     Outputs:
-    - gdf <geopandas dataframe>: consists of a list of EFG polygons cut with respect to roi
+    - gdf <geopandas dataframe>: consists of a list of EFG polygons cut with respect to MPA
     """
     
     Geometry = []
-
-    for x in range(len(path_EFG)):
-        #Reading each EFG
-        gdf = gpd.read_file(str(path_EFG[x]))
     
-        #Choosing the crs
-        gdf = gdf.set_crs(epsg=4326, allow_override=True)
+    if not isinstance(path_EFG, (np.ndarray,list)):
+        raise TypeError("Need an array with the paths where the EFG layers are located")
     
-        #We want only the polygons within our study place
-        clip = gpd.clip(gdf, roi)
-        clip = clip.reset_index()
-    
-        #Selecting the 'geometry' column
-        geo = clip.geometry
-
-        Geometry.append(geo)
+    if isinstance(path_EFG, (np.ndarray,list)):
         
-    joined = gpd.GeoDataFrame(pd.concat(Geometry, ignore_index=True))
+        for x in range(len(path_EFG)):
+            #Reading each EFG
+            gdf = gpd.read_file(str(path_EFG[x]))
+
+            #Choosing the crs
+            gdf = gdf.set_crs(epsg=4326, allow_override=True)
+
+            #We want only the polygons within our study place
+            clip = gpd.clip(gdf, MPA)
+            clip = clip.reset_index()
+
+            #Selecting the 'geometry' column
+            geo = clip.geometry
+
+            Geometry.append(geo)
+
+        joined = gpd.GeoDataFrame(pd.concat(Geometry, ignore_index=True))
     
     return joined
 
@@ -291,197 +301,137 @@ def Clip_EFG(roi, path_EFG):
 #Indices and metrics functions
 #---------------------------------------------------------------------------------------------------------------------
 
-def shannon(roi, gdf, grid_gdf, gdf_col_name, source):
+def shannon(MPA, gdf, grid_gdf):
     """
+    This function calculates the shannon index using the "indivudualCount" colum of the OBIS data as species abundance information
+
     input(s):
-    roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
+    MPA <shapely polygon in CRS WGS84:EPSG 4326>: Marine Proteted Area of interest
     gdf <geopandas dataframe>: contains at least the name of the species, their abundance and either
                             i) the distribution polygons of each of them or (presumbaly from IUCN or local surveys),
                             ii) points denoting the observations of each species - repeated observations for the same species
     grid_gdf <geopandas dataframe>: consists of polygons of grids typically generated by the gridding function
                                   : containts at least a geometry column and a unique grid_id
     gdf_col_name <string>: corresponds to the name of the abundance information column in the gdf
-    source <str>: if the data is from obis or from IUCN
+    source <str>: if the data is from OBIS or from IUCN
     
     output(s):
     gdf <geopandas dataframe>: with an additional column ('shannon') containing the calculation of that index per grid
                              : or geometry
-    """
-    if source == 'obis':
-        # convert OBIS dataframe to geodataframe
-        obis = gpd.GeoDataFrame(gdf, geometry=gpd.points_from_xy(gdf.decimalLongitude, gdf.decimalLatitude))
-        
-        #Join in a gdf all the geometries within roi
-        obis = gpd.clip(obis.set_crs(epsg=4326, allow_override=True), roi.set_crs(epsg=4326, allow_override=True))
-        
-        #Spatial join of gdf and grid_gdf
-        pointInPolys = sjoin(obis, grid_gdf, how='inner')
-        
-        #To count the total abundance number from all the species in a grid
-        N = pd.DataFrame()
-        N['N'] = pointInPolys.groupby('Grid_ID').apply(lambda x: x[str(gdf_col_name)].sum())
-        
-        #Merge the datasets based on the Grid_ID
-        new = pd.merge(pointInPolys, N, on='Grid_ID')
-        
-        #Calculate the Shannon index
-        new['pi'] = new['abundance']/new['N']
-        new['shannon'] = (-1)*new['pi']*np.log(new['pi'])
+    """ 
+    #Join in a gdf all the geometries within MPA
+    gdf = gpd.clip(gdf.set_crs(epsg=4326, allow_override=True), MPA.set_crs(epsg=4326, allow_override=True))
     
-        #Sum all the value in a grid
-        new = new.dissolve(by='Grid_ID', aggfunc={'shannon': 'sum'})
-        
-        #Delete the geometries from obis data
-        new = new.drop(['geometry'], axis = 1)
-        
-        #Merge with the grid_dgf
-        new = new.merge(grid_gdf, how='right', on='Grid_ID')
-        
-        grid_gdf = gpd.GeoDataFrame(new)
-
-    elif source == 'IUCN':
-        #Join in a gdf all the geometries within ROI
-        gdf = gpd.clip(gdf.set_crs(epsg=4326, allow_override=True), roi.set_crs(epsg=4326, allow_override=True))
-
-        #This function calculates the sum of all abundances of overlapping species
-        overlap = map_algebra(gdf, gdf_col_name, 'sum')
-
-        #Merged the overlap values of overlapping geometries with the grid gdf
-        merged = gpd.sjoin(overlap, grid_gdf, how='left')
-        merged['n_value'] = overlap['algebra_overlaps']
+    #Spatial join of gdf and grid_gdf
+    pointInPolys = sjoin(gdf, grid_gdf, how='inner')
     
-        #for Shannon calculations
-        #calculates the Shannon Index per grid cell and its corresponding MBU value
-        #pi = (n/N): where n is the abundance number per species and N is the total abundance number in the dataset 
+    # 'individualCount' refers to the number of individual organisms observed or sampled 
+    # for a particular species at a particular location and time.
+    pointInPolys = pointInPolys.dropna(subset='individualCount')
+    pointInPolys['individualCount'] = pointInPolys['individualCount'].astype(float).astype(int)
     
-        #Calculate the pi value per row
-        pi = merged['n_value']/np.sum(merged['n_value'])
-        pi = pi.fillna(0)
-        merged['pilogpi'] = pi*np.log(pi)
-
-        #Dissolve the DataFrame by 'index_right' and aggregate using the calculated Shannon entropy
-        dissolve = merged.dissolve(by="index_right", aggfunc={'pilogpi': 'sum'})
+    #To calculate the total number of species
+    N = pd.DataFrame()
+    N['N'] = pointInPolys.groupby('Grid_ID').apply(lambda x: x['individualCount'].sum())
     
-        #Calculate the Shannon index per grid
-        dissolve['pilogpi'] = (-1)*dissolve['pilogpi']
-
-        #Put this into cell
-        grid_gdf.loc[dissolve.index, 'shannon'] = dissolve.pilogpi.values
+    new = pd.merge(pointInPolys, N, on='Grid_ID')
+    
+    #Calculate the Shanoon index with the information available
+    new['pi'] = new['individualCount']/new['N']
+    new['shannon'] = (-1)*new['pi']*np.log(new['pi'])
+    
+    new = new.dissolve(by='Grid_ID', aggfunc={'shannon': 'sum'})
         
-    else:
-        raise ValueError("Unsupported source: {}".format(operation))
+    new = new.drop(['geometry'], axis = 1)
+        
+    merge = new.merge(grid_gdf, how='right', on='Grid_ID')
+        
+    grid_gdf = gpd.GeoDataFrame(merge)
     
     return grid_gdf
 
 #---------------------------------------------------------------------------------------------------------------------
 
-def simpson(roi, gdf, grid_gdf, gdf_col_name, source):
+def simpson(MPA, gdf, grid_gdf):
     """
+    This function calculates the shannon index using the "indivudualCount" colum of the OBIS data as species abundance information
+
     input(s):
-    roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
+    MPA <shapely polygon in CRS WGS84:EPSG 4326>: Marine Proteted Area of interest
     gdf <geopandas dataframe>: contains at least the name of the species, their abundance and either
                             i) the distribution polygons of each of them or (presumbaly from IUCN or local surveys),
                             ii) points denoting the observations of each species - repeated observations for the same species
     grid_gdf <geopandas dataframe>: consists of polygons of grids typically generated by the gridding function
                                   : containts at least a geometry column and a unique grid_id
     gdf_col_name <string>: corresponds to the name of the abundance information column in the gdf
-    source <str>: if the data is from obis or from IUCN
+    source <str>: if the data is from OBIS or from IUCN
     
     output(s):
     gdf <geopandas dataframe>: with an additional columns ('simpson') containing the calculation of that index per grid
                              : or geometry
-    """
-
-    if source == 'obis':
-        # convert OBIS dataframe to geodataframe
-        obis = gpd.GeoDataFrame(gdf, geometry=gpd.points_from_xy(gdf.decimalLongitude, gdf.decimalLatitude))
-        
-        #Join in a gdf all the geometries within roi
-        obis = gpd.clip(obis.set_crs(epsg=4326, allow_override=True), roi.set_crs(epsg=4326, allow_override=True))
-        
-        #Spatial join of gdf and grid_gdf
-        pointInPolys = sjoin(obis, grid_gdf, how='inner')
-        
-        #To count the total abundance number from all the species in a grid
-        N = pd.DataFrame()
-        N['N'] = pointInPolys.groupby('Grid_ID').apply(lambda x: x[str(gdf_col_name)].sum())
-        
-        #where num = n(n-1)
-        pointInPolys['num'] = pointInPolys['abundance']*(pointInPolys['abundance']-1)
-        
-        #Merge the datasets based on the Grid_ID
-        new = pd.merge(pointInPolys, N, on='Grid_ID')
-        
-        #Calculate the Simpson index
-        new['simpson'] = 1-((new['num'])/(new['N']*(new['N']-1)))
+    """ 
+    #Join in a gdf all the geometries within MPA
+    gdf = gpd.clip(gdf.set_crs(epsg=4326, allow_override=True), MPA.set_crs(epsg=4326, allow_override=True))
     
-        #Sum all the value in a grid
-        new = new.dissolve(by='Grid_ID', aggfunc={'simpson': 'sum'})
-        
-        #Delete the geometries from obis data
-        new = new.drop(['geometry'], axis = 1)
-        
-        #Merge with the grid_dgf
-        new = new.merge(grid_gdf, how='right', on='Grid_ID')
-        
-        grid_gdf = gpd.GeoDataFrame(new)
-
-    elif source == 'IUCN':
-        #Join in a gdf all the geometries within ROI
-        gdf = gpd.clip(gdf.set_crs(epsg=4326, allow_override=True), roi)
-
-        #This function calculates the sum of all abundances of overlapping species
-        overlap = map_algebra(gdf, gdf_col_name, 'sum')
-
-        #Merged the overlap values of overlapping geometries with the grid gdf
-        merged = gpd.sjoin(overlap, grid_gdf, how='left')
-        merged['n_value'] = overlap['algebra_overlaps']
-        
-        #for Simpson calculations
-        #Calculate the Simpson Index per grid cell and its corresponding MBU value
+    #Spatial join of gdf and grid_gdf
+    pointInPolys = sjoin(gdf, grid_gdf, how='inner')
     
-        #Calculate the numerator and denominator needed per row
-        num = merged['n_value']*(merged['n_value']-1)
-        den = np.sum(merged['n_value'])*(np.sum(merged['n_value'])-1)
-        merged['num'] = num
-
-        #Dissolve the DataFrame by 'index_right' and aggregate using the calculated Shannon entropy
-        dissolve = merged.dissolve(by="index_right", aggfunc={'num': 'sum'})
+    # 'individualCount' refers to the number of individual organisms observed or sampled 
+    # for a particular species at a particular location and time.
+    pointInPolys = pointInPolys.dropna(subset='individualCount')
+    pointInPolys['individualCount'] = pointInPolys['individualCount'].astype(float).astype(int)
     
-        #Calculate the Shannon index per grid
-        dissolve['Simpson'] = 1-(dissolve['num']/den)
-
-        #Put this into cell
-        grid_gdf.loc[dissolve.index, 'simpson'] = dissolve.Simpson.values
+    #To calculate the total number of species
+    N = pd.DataFrame()
+    N['N'] = pointInPolys.groupby('Grid_ID').apply(lambda x: x['individualCount'].sum())
         
-    else:
-        raise ValueError("Unsupported source: {}".format(operation))
+    #where num = n(n-1)
+    pointInPolys['num'] = pointInPolys['individualCount']*(pointInPolys['individualCount']-1)
+        
+    #Merge the datasets based on the Grid_ID
+    new = pd.merge(pointInPolys, N, on='Grid_ID')
+        
+    #Calculate the Simpson index
+    new['simpson'] = 1-((new['num'])/(new['N']*(new['N']-1)))
+    
+    #Sum all the value in a grid
+    new = new.dissolve(by='Grid_ID', aggfunc={'simpson': 'sum'})
+        
+    #Delete the geometries from OBIS data
+    new = new.drop(['geometry'], axis = 1)
+        
+    #Merge with the grid_dgf
+        
+    merge = new.merge(grid_gdf, how='right', on='Grid_ID')
+        
+    grid_gdf = gpd.GeoDataFrame(merge)
     
     return grid_gdf
 
 #---------------------------------------------------------------------------------------------------------------------
 
-def species_richness(roi, df, grid_gdf, source):
+def species_richness(MPA, gdf, grid_gdf):
     """
+    This fucntion calculates the maximum number of species that we can find in a specific area/grid from two ways:
+        1. using IUCN RedList data: count the overlapping geometries of each species
+        2. using OBIS data: count the total number of species' ocurrences or species' observations 
+        
     inputs:
-    roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
+    MPA <shapely polygon in CRS WGS84:EPSG 4326>: Marine Proteted Area of interest
     df <geopandas dataframe>: contains at least the name of the species and the distribution polygons of each of them
     gdf <geopandas dataframe>: contains at least the name of the species and either
                             i) the distribution polygons of each of them or (presumbaly from IUCN or local surveys),
                             ii) points denoting the observations of each species - repeated observations for the same species
-    source <str>: if the data is from obis or from IUCN
+    source <str>: if the data is from OBIS or from IUCN
 
     output(s):
     gdf <geopandas dataframe>: with an additional column ('species_richness') containing the calculation of this factor 
                              : per grid or geometry
-    """
+    """      
+    #Join in a gdf all the geometries within MPA
+    gdf = gpd.clip(gdf.set_crs(epsg=4326, allow_override=True), MPA.set_crs(epsg=4326, allow_override=True))
     
-    if source == 'obis':
-        # convert OBIS dataframe to geodataframe
-        obis = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.decimalLongitude, df.decimalLatitude))
-        
-        #Join in a gdf all the geometries within ACMC
-        gdf = gpd.clip(obis.set_crs(epsg=4326, allow_override=True), roi.set_crs(epsg=4326, allow_override=True))
+    if isinstance(gdf.geometry[1], shapely.geometry.point.Point):
         
         #Spatial join of gdf and grid_gdf
         pointInPolys = sjoin(gdf, grid_gdf, how='right')
@@ -492,12 +442,10 @@ def species_richness(roi, df, grid_gdf, source):
         
         grid_gdf = gpd.GeoDataFrame(grid_gdf)
 
-    elif source == 'IUCN':
-        #Join in a gdf all the geometries within ACMC
-        df2 = gpd.clip(df.set_crs(epsg=4326, allow_override=True), roi.set_crs(epsg=4326, allow_override=True))
+    elif not isinstance(gdf.geometry[1], shapely.geometry.point.Point):
         
         #Count the number of overlapping geometries 
-        overlap = count_overlapping_geometries(df2)
+        overlap = count_overlapping_geometries(gdf)
         
         #To count how many geometries are in each grid
         merged = gpd.sjoin(overlap, grid_gdf, how='left')
@@ -509,18 +457,18 @@ def species_richness(roi, df, grid_gdf, source):
 
         # put this into cell
         grid_gdf.loc[dissolve.index,'species_richness'] = dissolve.n_species.values
-        
-    else:
-        raise ValueError("Unsupported source: {}".format(operation))
     
     return grid_gdf
 
 #---------------------------------------------------------------------------------------------------------------------
 
-def endemism(roi, gdf, grid_gdf):
+def endemism(MPA, gdf, grid_gdf):
     """
+    This function calculates a distribution ratio per species, using the global distribution polygon from the IUCN RedList
+    and the species distribution within the MPA to deduce a endemic ratio per each species
+    
     inputs:
-    roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
+    MPA <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
     gdf <geopandas dataframe>: contains at least the name of the species and the distribution polygons of each of them
     grid_gdf <geopandas dataframe>: consists of polygons of grids typically generated by the gridding function
                                   : containts atleast a geometry column and a unique grid_id
@@ -528,10 +476,10 @@ def endemism(roi, gdf, grid_gdf):
     gdf <geopandas dataframe>: with an additional column ('endemism') containing the calculation of this factor per grid
                              : or geometry
     """
-    #Polygons of species distribution to be clipped to roi
-    df2 = gpd.clip(gdf.set_crs(epsg=4326, allow_override=True), roi)
+    #Polygons of species distribution to be clipped to MPA
+    df2 = gpd.clip(gdf.set_crs(epsg=4326, allow_override=True), MPA.set_crs(epsg=4326, allow_override=True))
     
-    #Calculate the portion of the area covered by each species in roi with respect to its global distribution
+    #Calculate the portion of the area covered by each species in MPA with respect to its global distribution
     dist_ratio2 = np.round(df2.area/gdf.area, decimals=4, out=None)
     
     #Calculate the log of that ratio
@@ -559,10 +507,13 @@ def endemism(roi, gdf, grid_gdf):
  
 #---------------------------------------------------------------------------------------------------------------------
 
-def wege(roi, gdf, grid_gdf):
+def wege(MPA, gdf, grid_gdf):
     """
+    This function calculates the Weighted Endemism including Global Endangerment (WEGE) index as it is described in 
+    [Farooq et al. (2020)](https://onlinelibrary.wiley.com/doi/full/10.1111/ddi.13148).
+    
     inputs:
-    roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
+    MPA <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
     gdf <geopandas dataframe>: contains at least the name of the species, the risk category of Red List IUCN 
                              :and the distribution polygons of each of them
     grid_gdf <geopandas dataframe>: consists of polygons of grids typically generated by the gridding function
@@ -621,21 +572,21 @@ def wege(roi, gdf, grid_gdf):
 
         return cat_to_risk.get(cat)
     
-    #To extract the roi area value
-    roi_area = roi.area[0]
-    
-    #Polygons of species distribution to be clipped to roi
-    df = gpd.clip(gdf.set_crs(epsg=4326, allow_override=True), roi)
-    
-    #Calculate the portion of the area covered by each species in roi with respect to the roi area
+    #To extract the MPA area value
+    MPA_area = MPA.area[0]
+     
+    #Polygons of species distribution to be clipped to MPA
+    df = gpd.clip(gdf.set_crs(epsg=4326, allow_override=True), MPA)
+
+    #Calculate the portion of the area covered by each species in MPA with respect to the MPA area
     #This is called "Weighted Endemism" factor
-    we = np.round(df.area/roi_area, decimals=4, out=None)
+    we = np.round(df.area/MPA_area, decimals=4, out=None)
     sq_we = we**(0.5)
-    
+
     #Add this information into the new gdf
     df['we'] = we
     df['sq_we'] = sq_we
-    
+
     # replaces long RedList name with two-letter code
     long_to_short = {
         'Data Deficient':'DD',
@@ -649,16 +600,16 @@ def wege(roi, gdf, grid_gdf):
     }
 
     df['redlistCat'] = df['redlistCat'].replace(long_to_short)
-    
+
     #List of extinction probabilities for each species
     df['ER'] = [extinction_risk(cat) for cat in df['redlistCat']]
-    
+
     #Calculate the "WEGE factor" individually
     df['wege_i'] = df['sq_we']*df['ER']
-    
+
     #Function that calculates the sum of the individual wege_i values of all species of overlapping geometries
     overlap_wege_v = map_algebra(df, 'wege_i', 'sum')
-    
+
     #Merged the log_dist2 values of overlapping geometries with the grid gdf
     merged = gpd.sjoin(overlap_wege_v, grid_gdf, how='left')
     merged['n_value']= overlap_wege_v['algebra_overlaps']
@@ -674,10 +625,12 @@ def wege(roi, gdf, grid_gdf):
     
 #---------------------------------------------------------------------------------------------------------------------    
 
-def habitats_survey(roi, grid_gdf, path_EFG):
+def habitat_accounting(MPA, grid_gdf, path_EFG):
     """
+    This fucntion calculates the maximum number of EFG from the IUCN Global Ecosystem Typology that we can find in a specific area/grid 
+    
     inputs:
-    roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
+    MPA <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
     list_EFG <list>: consist in a list with path location of each EFG file 
     grid_gdf <geopandas dataframe>: consists of polygons of grids typically generated by the gridding function
                                   : containts atleast a geometry column and a unique grid_id
@@ -687,7 +640,7 @@ def habitats_survey(roi, grid_gdf, path_EFG):
     """
     
     #Join in a gdf all the geometries within ROI
-    joined = Clip_EFG(roi, path_EFG)
+    joined = Clip_EFG(MPA, path_EFG)
     
     #Count the number of overlappong geometries from joined gdf
     overlap_geo = count_overlapping_geometries(joined)
@@ -701,7 +654,7 @@ def habitats_survey(roi, grid_gdf, path_EFG):
     dissolve = merged.dissolve(by="index_right", aggfunc={'n_habitats': 'max'})
 
     # put this into cell
-    grid_gdf.loc[dissolve.index, 'habitats_survey'] = dissolve.n_habitats.values
+    grid_gdf.loc[dissolve.index, 'habitat_accounting'] = dissolve.n_habitats.values
     
     return grid_gdf
 
@@ -709,193 +662,285 @@ def habitats_survey(roi, grid_gdf, path_EFG):
 #Modulating Factor Functions
 #---------------------------------------------------------------------------------------------------------------------
 
-def mbu_biodiversity_score(roi, gdf, grid_gdf, gdf_col_name, source, crs_transformation_kms):
+def mbu_biodiversity_score(MPA, gdf, grid_gdf, source, crs_transformation_kms):
     """
+    This functions combines the Shannon Index and Simpson Index to calculate a Biodiversity Score per grid or 
+    given area and converts these numbers into MBUs.
+    It calls internally the Shannon and Simpson functions to do the calculations
+    
     input(s):
-    roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
-    gdf <geopandas dataframe>: contains at least the name of the species, the distribution polygons of each of them 
-                             :and their abundance
+    MPA <shapely polygon in CRS WGS84:EPSG 4326>: Marine Proteted Area of interest
     gdf <geopandas dataframe>: contains at least the name of the species and either
                             i) the distribution polygons of each of them or (presumbaly from IUCN or local surveys),
                             ii) points denoting the observations of each species - repeated observations for the same species
-    source <str>: if the data is from obis or from IUCN
-    gdf_col_name <string>: corresponds to the name of the abundance information column in the gdf
-    crs_transformation_kms: coordinate reference system transformation applied to the roi in meters 
+    grid_gdf <geopandas dataframe>: consists of polygons of grids typically generated by the gridding function
+                                  : containts at least a geometry column and a unique grid_id
+    source <str>: if the data is from OBIS or from IUCN
+    crs_transformation_kms: coordinate reference system transformation applied to the MPA in meters 
     
     output(s):
-    gdf <geopandas dataframe>: with an additional column ('mbu_biodiversity_score') containing the calculation of MBUs with this                                :factor information per grid or geometry
+    gdf <geopandas dataframe>: with an additional column ('mbu_biodiversity_score') containing the calculation of MBUs with this                                
+                             :factor information per grid or geometry
     """
     
-    #Shannon Index calculation
-    df1 = shannon(roi, gdf, grid_gdf, gdf_col_name, source)
-    
-    #Simpson Index calculation
-    df2 = simpson(roi, gdf, grid_gdf, gdf_col_name, source)
-    
-    #Normalization factor
-    Norm_factor1 = df1['shannon']/df1['shannon'].max()
-    Norm_factor2 = df2['simpson']/df2['simpson'].max()
-    
-    #Convert area from degrees to square kilometers
-    df = gpd.GeoDataFrame()
-    df['area_sqkm'] = (df1.to_crs(crs=crs_transformation_kms).area)*10**(-6)
-    
-    #Add colums
-    df['shannon'] = df1['shannon']
-    df['simpson'] = df2['simpson']
+    if source == 'OBIS':
+        
+        #Shannon Index calculation
+        df1 = shannon(MPA, gdf, grid_gdf)
+        
+        #Simpson Index calculation
+        df2 = simpson(MPA, gdf, grid_gdf)
+        
+        #Normalization factor
+        Norm_factor1 = df1['shannon']/df1['shannon'].max()
+        Norm_factor2 = df2['simpson']/df2['simpson'].max()
+        
+        #Convert area from degrees to square kilometers
+        df1['area_sqkm'] = (df1.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+        
+        #Add colums
+        #df['shannon'] = df1['shannon']
+        df1['simpson'] = df2['simpson']
 
-    #Calculate the MBUS from this MF
-    df['mbu_biodiversity_score'] = Norm_factor1*df['area_sqkm'] + Norm_factor2*df['area_sqkm']
-    
-    return df
+        #Calculate the MBUS from this MF
+        df1['mbu_biodiversity_score'] = Norm_factor1*df1['area_sqkm'] + Norm_factor2*df1['area_sqkm']
+        
+    elif source == 'IUCN':
+        print('The Biodiversity Score - Modulating Factor is not available to IUCN data')
+        
+    else:
+        raise ValueError("Unsupported source: {}".format(source))
+
+    return df1
 
 #---------------------------------------------------------------------------------------------------------------------
 
-def mbu_species_richness(roi, gdf, grid_gdf, source, crs_transformation_kms):
+def mbu_species_richness(MPA, gdf, grid_gdf, crs_transformation_kms):
     """
+    This function calculates the amount of MBUs from the species richness metric and converts these 
+    numbers into MBUs in a given area in sqd kms.
+    It calls internally the Species Richness function to do the calculations
+    
     input(s):
-    roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
-    gdf <geopandas dataframe>: contains at least the name of the species, the distribution polygons of each of them 
-                             :and their abundance
+    MPA <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
     gdf <geopandas dataframe>: contains at least the name of the species and either
                             i) the distribution polygons of each of them or (presumbaly from IUCN or local surveys),
                             ii) points denoting the observations of each species - repeated observations for the same species
-    source <str>: if the data is from obis or from IUCN
-    crs_transformation_kms: coordinate reference system transformation applied to the roi in meters 
+    grid_gdf <geopandas dataframe>: consists of polygons of grids typically generated by the gridding function
+                                  : containts at least a geometry column and a unique grid_id
+    source <str>: if the data is from OBIS or from IUCN
+    crs_transformation_kms: coordinate reference system transformation applied to the MPA in meters 
     
     output(s):
-    gdf <geopandas dataframe>: with an additional column ('mbu_species_richness') containing the calculation of MBUs with this                                  :factor information per grid or geometry
+    gdf <geopandas dataframe>: with an additional column ('mbu_species_richness') containing the calculation of MBUs with this
+                             : factor information per grid or geometry
     """
     
     #Species Richness calculation
-    df1 = species_richness(roi, gdf, grid_gdf, source)
-    
+    df1 = species_richness(MPA, gdf, grid_gdf)
+        
     #Normalization factor
     Norm_factor1 = df1['species_richness']/df1['species_richness'].max()
-    
+        
     #Convert area from degrees to square kilometers
-    df = gpd.GeoDataFrame()
-    df['area_sqkm'] = (df1.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+    df1['area_sqkm'] = (df1.to_crs(crs=crs_transformation_kms).area)*10**(-6)
 
     #Calculate the MBUS from this MF
-    df['mbu_species_richness'] = Norm_factor1*df['area_sqkm']
-    
-    return df
+    df1['mbu_species_richness'] = Norm_factor1*df1['area_sqkm']
+        
+    return df1
     
 #---------------------------------------------------------------------------------------------------------------------
     
-def mbu_endemism(roi, gdf, grid_gdf, crs_transformation_kms):
+def mbu_endemism(MPA, gdf, grid_gdf, source, crs_transformation_kms):
     """
+    This function calculates the amount of MBUs from the Endemic index and converts these numbers into 
+    MBUs in a given area in sqd kms.
+    It calls internally the Endemism function to do the calculations
+    
     input(s):
-    roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
-    gdf <geopandas dataframe>: contains at least the name of the species, the distribution polygons of each of them 
-                             :and their abundance
+    MPA <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
+    gdf <geopandas dataframe>: contains at least the name of the species, their abundance and either
+                         i) the distribution polygons of each of them or (presumbaly from IUCN or local surveys)
+                        ii) points denoting the observations of each species - repeated observations for the same species
     grid_gdf <geopandas dataframe>: consists of polygons of grids typically generated by the gridding function
                                   : containts at least a geometry column and a unique grid_id
-    crs_transformation_kms: coordinate reference system transformation applied to the roi in meters 
+    source <str>: if the data is from OBIS or from IUCN											
+    crs_transformation_kms: coordinate reference system transformation applied to the MPA in meters 
     
     output(s):
-    gdf <geopandas dataframe>: with an additional column ('mbu_endemism') containing the calculation of MBUs with this                                          :factor information per grid or geometry
+    gdf <geopandas dataframe>: with an additional column ('mbu_endemism') containing the calculation of MBUs with this
+                             :factor information per grid or geometry
     """
     
-    #Endemic factor calculation
-    df = endemism(roi, gdf, grid_gdf)
-    
-    #Normalization factor
-    Norm_factor1 = df['endemism']/df['endemism'].max()
-    
-    #Convert area from degrees to square kilometers
-    df = gpd.DataFrame()
-    df['area_sqkm'] = (df.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+    if source == 'OBIS':
+        print('Endemic Modulating Factor is not available to OBIS data')
+        
+        #Calculate the MBUS from this MF
+        df1['mbu_endemism'] = 0
+        
+    elif source == 'IUCN':
 
-    #Calculate the MBUS from this MF
-    df['mbu_endemism'] = Norm_factor1*df['area_sqkm']
+        #Endemic factor calculation
+        df1 = endemism(MPA, gdf, grid_gdf)
+
+        #Normalization factor
+        Norm_factor1 = df1['endemism']/df1['endemism'].max()
+
+        #Convert area from degrees to square kilometers
+        df1['area_sqkm'] = (df1.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+
+        #Calculate the MBUS from this MF
+        df1['mbu_endemism'] = Norm_factor1*df1['area_sqkm']
+        
+    else:
+        raise ValueError("Unsupported source: {}".format(source))
     
-    return df
+    return df1
 
 #--------------------------------------------------------------------------------------------------------------------- 
    
-def mbu_wege(roi, gdf, grid_gdf, crs_transformation_kms):
+def mbu_wege(MPA, gdf, grid_gdf, source, crs_transformation_kms):
     """
+    This function calculates the amount of MBUs from the WEGE index and converts these numbers into MBUs in a 
+    given area in sqd kms.
+    It calls internally the WEGE function to do the calculations
+    
     input(s):
-    roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
-    gdf <geopandas dataframe>: contains at least the name of the species, the distribution polygons of each of them 
-                             :and their abundance
+    MPA <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
+    gdf <geopandas dataframe>: contains at least the name of the species, their abundance and either
+                         i) the distribution polygons of each of them or (presumbaly from IUCN or local surveys)
+                        ii) points denoting the observations of each species - repeated observations for the same species
     grid_gdf <geopandas dataframe>: consists of polygons of grids typically generated by the gridding function
                                   : containts at least a geometry column and a unique grid_id
-    crs_transformation_kms: coordinate reference system transformation applied to the roi in meters 
+    source <str>: if the data is from OBIS or from IUCN											
+    crs_transformation_kms: coordinate reference system transformation applied to the MPA in meters 
     
     output(s):
-    gdf <geopandas dataframe>: with an additional column ('mbu_wege') containing the calculation of MBUs with this                                              :factor information per grid or geometry
+    gdf <geopandas dataframe>: with an additional column ('mbu_wege') containing the calculation of MBUs with this                                              
+                             :factor information per grid or geometry
     """
+    if source == 'OBIS':
+        print('WEGE Modulating Factor is not available to OBIS data')
+        
+        #Calculate the MBUS from this MF
+        df1['mbu_endemism'] = 0
+        
+    elif source == 'IUCN':
     
-    #Wege factor calculation
-    df = wege(roi, gdf, grid_gdf)
-    
-    #Normalization factor
-    Norm_factor1 = df['wege']/df['wege'].max()
-    
-    #Convert area from degrees to square kilometers
-    df = gpd.DataFrame()
-    df['area_sqkm'] = (df.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+        #Wege factor calculation
+        df1 = wege(MPA, gdf, grid_gdf)
 
-    #Calculate the MBUS from this MF
-    df['mbu_wege'] = Norm_factor1*df['area_sqkm']
+        #Normalization factor
+        Norm_factor1 = df1['wege']/df1['wege'].max()
+
+        #Convert area from degrees to square kilometers
+        df1['area_sqkm'] = (df1.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+
+        #Calculate the MBUS from this MF
+        df1['mbu_wege'] = Norm_factor1*df1['area_sqkm']
+        
+    else:
+        raise ValueError("Unsupported source: {}".format(source))
     
-    return df
+    return df1
 
 #---------------------------------------------------------------------------------------------------------------------
 
-def mbu_habitats_survey(roi, grid_gdf, path_EFG, crs_transformation_kms):
+def mbu_habitats_survey(MPA, grid_gdf, path_EFG, crs_transformation_kms):
     """
-    inputs:
-    roi <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
-    list_EFG <list>: consist in a list with path location of each EFG file 
+    This function calculates the amount of MBUs from the Habitats Survey calculation and converts these numbers into MBUs in 
+    a given area in sqd kms.
+    It calls internally the habitats Survey function to do the calculations
+    
+    MPA <shapely polygon in CRS WGS84:EPSG 4326>: region of interest or the total project area
+    path_EFG <list>: consist in a list with path location of each EFG file 
     grid_gdf <geopandas dataframe>: consists of polygons of grids typically generated by the gridding function
-                                  : containts atleast a geometry column and a unique grid_id
-    crs_transformation_kms: coordinate reference system transformation applied to the roi in meters 
+                                  : containts at least a geometry column and a unique grid_id
+    crs_transformation_kms: coordinate reference system transformation applied to the MPA in meters 
     
     output(s):
-    gdf <geopandas dataframe>: with an additional column ('mbu_habitats_survey') containing the calculation of MBUs with this                                  :factor information per grid or geometry
+    gdf <geopandas dataframe>: with an additional column ('mbu_habitats_survey') containing the calculation of MBUs with this                                  
+                             :factor information per grid or geometry
     """
     
     #Wege factor calculation
-    df = habitats_survey(roi, grid_gdf, path_EFG)
+    df1 = habitat_accounting(MPA, grid_gdf, path_EFG)
     
     #Normalization factor
-    Norm_factor1 = df['habitats_survey']/df['habitats_survey'].max()
+    Norm_factor1 = df1['habitat_accounting']/df1['habitat_accounting'].max()
     
     #Convert area from degrees to square kilometers
-    df1 = gpd.DataFrame()
-    df1['area_sqkm'] = (df.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+    df1['area_sqkm'] = (df1.to_crs(crs=crs_transformation_kms).area)*10**(-6)
 
     #Calculate the MBUS from this MF
     df1['mbu_habitats_survey'] = Norm_factor1*df1['area_sqkm']
     
-    return df
+    return df1
 
 #---------------------------------------------------------------------------------------------------------------------
 #General MBU function
 #---------------------------------------------------------------------------------------------------------------------
 
-def give_mbu_score(modulating_factor_names, roi, grid_size_deg, grid_shape, gdf_col_name, path_EFG, source, crs_transformation_kms):
+def give_mbu_score(modulating_factor_names, MPA, gdf, grid_shape, grid_size_deg, path_EFG, source, crs_transformation_kms):
     """
-    inputs:
-    modulating_factor_names<list>: list of names of the modulating factors, e.g. ["species_richness", "habitat_survey"]
+    input(s):
+    modulating_factor_names: list of names of the modulating factors, e.g. ["species_richness", "habitats_survey"]
     modulating_factor_names:
-            - biodiversity_score
-            - species_richness
-            - endemism
-            - wege
-            - habitats_survey
-    roi <shapely polygon>: region of interest or the total project area
-    grid_size_deg <int>: size of the grid in degrees. Minimum values are enforced
-                     : if grid_size_deg = 0: it means there are no grids
+                - biodiversity_score
+                - species_richness
+                - endemism
+                - wege
+                - habitats_survey
+    MPA <shapely polygon>: region of interest or the total project area
+    gdf <geopandas dataframe>: contains at least the name of the species, their abundance and either
+                             i) the distribution polygons of each of them or (presumbaly from IUCN or local surveys)
+                            ii) points denoting the observations of each species - repeated observations for 
+                                the same species
+    grid_size_deg <int>: size of the grid in degress. Minimum values are enforced
+                       : if grid_size_deg = 0: it means there are no grids
     grid_shape <str>: either "square" or "hexagonal"
-    gdf_col_name <string>: corresponds to the name of the abundance information column in the gdf
-    path_EFG <list>: consists of a list of EFG polygons' paths to be reference internally
-    crs_transformation_kms: coordinate reference system transformation applied to the roi in meters 
-
+    path_EFG <list>: consist in a list with path location of each EFG file 
+    source <str>: if the data is from OBIS or from IUCN
+    crs_transformation_kms: coordinate reference system transformation applied to the MPA in meters 
+    
     output(s):
-    geopandas frame
+        gdf <geopandas dataframe>: with an additional columns with the MBUs from each MF chosen and the Total_Number_MBUs 
+                                 :per grid or geometry
     """
+    if not isinstance(modulating_factor_names, (np.ndarray, list)):
+        print('A list of modulating factors to calculate MBUs is needed')
+    
+    elif isinstance(modulating_factor_names, (np.ndarray, list)):
+        grid = create_grid(MPA, grid_shape, grid_size_deg)
+    
+        if 'biodiversity_score' in modulating_factor_names:
+            if source == 'OBIS':
+                grid['mbu_biodiversity_score'] = mbu_biodiversity_score(MPA, gdf, grid, source, crs_transformation_kms)['mbu_biodiversity_score']
+            elif source == 'IUCN':
+                grid['mbu_biodiversity_score'] = 0
+
+        if 'species_richness' in modulating_factor_names:
+            grid['mbu_species_richness'] = mbu_species_richness(MPA, gdf, grid, crs_transformation_kms)['mbu_species_richness']
+
+        if 'endemism' in modulating_factor_names:
+            if source == 'OBIS':
+                grid['mbu_endemism'] = 0
+            elif source == 'IUCN':
+                grid['mbu_endemism'] = mbu_endemism(MPA, gdf, grid, source, crs_transformation_kms)['mbu_endemism']     
+
+        if 'wege' in modulating_factor_names:
+            if source == 'OBIS':
+                grid['mbu_wege'] = 0
+            elif source == 'IUCN':
+                grid['mbu_wege'] = mbu_wege(MPA, gdf, grid, source, crs_transformation_kms)['mbu_wege']
+
+        if 'habitats_survey' in modulating_factor_names:
+            if not isinstance(path_EFG, np.ndarray):
+                grid['mbu_habitats_survey'] = 0
+            elif isinstance(path_EFG, np.ndarray):
+                grid['mbu_habitats_survey'] = mbu_habitats_survey(MPA, grid, path_EFG, crs_transformation_kms)['mbu_habitats_survey']
+
+        grid['Total_MBUs'] = grid['mbu_species_richness'] + grid['mbu_biodiversity_score'] + grid['mbu_endemism'] + grid['mbu_wege'] + grid['mbu_habitats_survey']
+    
+    return grid

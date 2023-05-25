@@ -272,10 +272,10 @@ def Clip_EFG(MPA, path_EFG):
     
     Geometry = []
     
-    if not isinstance(path_EFG, np.ndarray):
+    if not isinstance(path_EFG, (np.ndarray,list)):
         raise TypeError("Need an array with the paths where the EFG layers are located")
     
-    if isinstance(path_EFG, np.ndarray):
+    if isinstance(path_EFG, (np.ndarray,list)):
         
         for x in range(len(path_EFG)):
             #Reading each EFG
@@ -933,7 +933,7 @@ def give_mbu_score(modulating_factor_names, MPA, gdf, grid_shape, grid_size_deg,
             if source == 'OBIS':
                 grid['mbu_wege'] = 0
             elif source == 'IUCN':
-                grid['mbu_wege'] = mbu_endemism(MPA, gdf, grid, source, crs_transformation_kms)['mbu_wege']
+                grid['mbu_wege'] = mbu_wege(MPA, gdf, grid, source, crs_transformation_kms)['mbu_wege']
 
         if 'habitats_survey' in modulating_factor_names:
             if not isinstance(path_EFG, np.ndarray):
