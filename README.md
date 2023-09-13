@@ -52,9 +52,12 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 Please make sure to update tests as appropriate.
 
 ## Our Team
-- Margaux Filippi
 - Maureen Fonseca (maureen@openearth.org)
-- Ando Shah (ando@openearth.org)
+- Ando Shah
+- Martin Wainstein (martin@openearth.org)
+- Louisa Durkin
+- Paige Lewington
+- Margaux Filippi
 
 ## License
 [OEF](https://www.openearth.org)
