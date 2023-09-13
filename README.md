@@ -40,6 +40,12 @@ Here you can find resources as:
 
 If you want to learn more about the status of our work in the Marine Biodiversity Credit, please review our [MBU Status Page](https://www.notion.so/openearth/Marine-Biodiversity-Credit-Status-Open-381755efad894eacb6204b78bbfc352d)
 
+## Repository Structure
+- `Documentation`: this folder contains useful documentation created for the project (maps, plots, papers, etc).
+- `Experimentation work`: contains codes made to do tests of the functions.
+- `Extras`: contains codes made to visualize other types of data.
+- `Marine Ecosystem Credits`: contains a MBU methodology folder where are all the steps to assign Marine Biodiversity Credits 
+
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
