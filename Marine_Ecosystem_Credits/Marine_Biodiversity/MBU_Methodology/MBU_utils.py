@@ -3,7 +3,7 @@ import glob
 import math
 import numpy as np
 import pandas as pd
-
+from pyobis import occurrences
 import shapely
 import geopandas as gpd
 from geopandas.tools import sjoin
@@ -13,6 +13,27 @@ from shapely.ops import linemerge, unary_union, polygonize
 #---------------------------------------------------------------------------------------------------------------------
 #High Level Helper Functions
 #---------------------------------------------------------------------------------------------------------------------
+
+def get_OBIS(MPA):
+    # create a polygon to access the OBIS data
+    min_x, min_y, max_x, max_y = MPA.total_bounds
+    geometry = f"POLYGON(({max_x} {min_y}, {min_x} {min_y}, {min_x} {max_y}, {max_x} {max_y}, {max_x} {min_y}))"
+
+    query = occurrences.search(geometry=geometry)
+    query.execute()
+
+    # returns the data
+    df = query.data 
+    
+    # List of columns to keep
+    columns_to_keep = ['scientificName','decimalLongitude', 'decimalLatitude', 'individualCount']
+
+    # Select and keep only the desired columns
+    df = df[columns_to_keep]
+    
+    df = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.decimalLongitude, df.decimalLatitude))
+    
+    return df
 
 def create_grid(MPA, grid_shape="hexagon", grid_size_deg=1.):
     """
@@ -115,149 +136,66 @@ def create_grid(MPA, grid_shape="hexagon", grid_size_deg=1.):
 
 #---------------------------------------------------------------------------------------------------------------------
 
-def count_overlapping_geometries(gdf):
-    #main source: https://gis.stackexchange.com/questions/387773/count-overlapping-features-using-geopandas
+def accounting_by_grid(gdf, grid_gdf):
     """
-    This function calculates the intersections of a list of polygons in a region
+    This function calculates the number of polygons that intersect each grid
 
     input(s):
         gdf <geopandas dataframe>: contains at least a geometry colum with the polygons to count
+        grid_gdf <geopandas dataframe>: 
 
     output(s):
-    gdf <geopandas dataframe>: containts at least a geometry colum, a unique grid_id and intersection accounting
+    gdf <geopandas dataframe>: containts at least a geometry colum and the "count" column
     """
     
-    #Get the name of the column containing the geometries
-    geom_col = gdf.geometry.name
+    # Create a new column in grid_gdf to store the species count
+    grid_gdf['count'] = 0
+
+    # Iterate over each row in grid_gdf
+    for index, row in grid_gdf.iterrows():
+        grid_geometry = row['geometry']
+        for feature_index, feature_row in gdf.iterrows():
+            feature_geometry = feature_row['geometry']
+
+            # Check for intersection
+            if grid_geometry.intersects(feature_geometry):
+                # Increment the species count for the current grid row
+                grid_gdf.at[index, 'count'] += 1
     
-    # Setting up a single piece that will be split later
-    input_parts = [gdf.unary_union.buffer(0)]
-    
-    # Finding all the "cutting" boundaries. Note: if the input GDF has 
-    # MultiPolygons, it will treat each of the geometry's parts as individual
-    # pieces.
-    cutting_boundaries = []
-    for i, row in gdf.iterrows():
-        this_row_geom = row[geom_col]
-        this_row_boundary = this_row_geom.boundary
-        if this_row_boundary.type[:len('multi')].lower() == 'multi':
-            cutting_boundaries = cutting_boundaries + list(this_row_boundary.geoms)
-        else:
-            cutting_boundaries.append(this_row_boundary)
-    
-    # Split the big input geometry using each and every cutting boundary
-    for boundary in cutting_boundaries:
-        splitting_results = []
-        for j,part in enumerate(input_parts):
-            new_parts = list(shapely.ops.split(part, boundary).geoms)
-            splitting_results = splitting_results + new_parts
-        input_parts = splitting_results
-    
-    # After generating all of the split pieces, create a new GeoDataFrame
-    new_gdf = gpd.GeoDataFrame({'id':range(len(splitting_results)),
-                                geom_col:splitting_results,
-                                },
-                               crs=gdf.crs,
-                               geometry=geom_col)
-    
-    # Find the new centroids.
-    new_gdf['geom_centroid'] = new_gdf.centroid
-    
-    # Starting the count at zero
-    new_gdf['count_intersections'] = 0
-    
-    # For each of the `new_gdf`'s rows, find how many overlapping features 
-    # there are from the input GDF.
-    for i,row in new_gdf.iterrows():
-        new_gdf.loc[i,'count_intersections'] = gdf.intersects(row['geom_centroid']).astype(int).sum()
-        pass
-    
-    # Dropping the column containing the centroids
-    new_gdf = new_gdf.drop(columns=['geom_centroid'])[['id','count_intersections',geom_col]]
-    
-    return new_gdf
+    return grid_gdf
 
 #---------------------------------------------------------------------------------------------------------------------
 
 #This function calculates a specific algebra operation of all values of an interest colum of overlapping geometries 
-def map_algebra(gdf, gdf_col_name, operation):
+def algebraic_sum_by_grid(gdf, grid_gdf, col_name):
     """
-    This function calculates the sum of all values of an interest colum of overlapping geometries 
-    
-    Input:
-    gdf <geopandas dataframe>: consists of polygons
-    gdf_col_name <string>: column name that has the value that we want to apply the algebra operation
-    operation <string>: algebra operation
-                      : options ('sum','mean','max','min','prod')
+    This function calculates the algebraic summatory with values from a specific column for polygons that 
+    intersect each grid.
 
-    Output:
-    gdf <geopandas dataframe>: consists of polygons with a new colum with a summation of interest values
+    input(s):
+        gdf <geopandas dataframe>: contains at least a geometry column that represent the species distribution 
+        globally
+        grid_gdf <geopandas dataframe>: contains at least a geometry column
+
+    output(s):
+        grid_gdf <geopandas dataframe>: contains at least a geometry column and the "summatory" column
     """
-    #main source: https://stackoverflow.com/questions/65073549/combine-and-sum-values-of-overlapping-polygons-in-geopandas
 
-    #The explode() method converts each element of the specified column(s) into a row
-    #This is useful if there are multipolygons
-    new_gdf = gdf.explode('geometry')
-    new_gdf['new_colum'] = new_gdf[str(gdf_col_name)]
+    # Create a new column in grid_gdf to store the result of the algebraic operation
+    grid_gdf['result'] = 0
 
-    #convert all polygons to lines and perform union
-    lines = unary_union(linemerge([geom.exterior for geom in new_gdf.geometry]))
+    # Iterate over each row in grid_gdf
+    for index, row in grid_gdf.iterrows():
+        grid_geometry = row['geometry']
+        for feature_index, feature_row in gdf.iterrows():
+            feature_geometry = feature_row['geometry']
 
-    #convert again to (smaller) intersecting polygons and to geodataframe
-    polygons = list(polygonize(lines))
-    intersects = gpd.GeoDataFrame({'geometry': polygons}, crs="EPSG:4326")
+            # Check for intersection
+            if grid_geometry.intersects(feature_geometry):
+                # Perform your algebraic operation here (e.g., sum 'Y' values)
+                grid_gdf.at[index, 'result'] += feature_row[col_name]
 
-    #to fix invalid geometries
-    intersects['geometry'] = intersects['geometry'].buffer(0)
-
-    #Perform sjoin with original geoframe to get overlapping polygons.
-    #Afterwards group per intersecting polygon to perform (arbitrary) aggregation
-    
-    if operation == 'sum':
-        intersects['algebra_overlaps'] = (intersects
-                                      .sjoin(new_gdf, predicate='within')
-                                      .reset_index()
-                                      .groupby(['level_0', 'index_right0'])
-                                      .head(1)
-                                      .groupby('level_0')
-                                      .new_colum.sum())
-    elif operation == 'mean':
-        intersects['algebra_overlaps'] = (intersects
-                                      .sjoin(new_gdf, predicate='within')
-                                      .reset_index()
-                                      .groupby(['level_0', 'index_right0'])
-                                      .head(1)
-                                      .groupby('level_0')
-                                      .new_colum.mean())
-    elif operation == 'max':
-        intersects['algebra_overlaps'] = (intersects
-                                      .sjoin(new_gdf, predicate='within')
-                                      .reset_index()
-                                      .groupby(['level_0', 'index_right0'])
-                                      .head(1)
-                                      .groupby('level_0')
-                                      .new_colum.max())
-    elif operation == 'min':
-        intersects['algebra_overlaps'] = (intersects
-                                      .sjoin(new_gdf, predicate='within')
-                                      .reset_index()
-                                      .groupby(['level_0', 'index_right0'])
-                                      .head(1)
-                                      .groupby('level_0')
-                                      .new_colum.min())
-    elif operation == 'prod':
-        intersects['algebra_overlaps'] = (intersects
-                                      .sjoin(new_gdf, predicate='within')
-                                      .reset_index()
-                                      .groupby(['level_0', 'index_right0'])
-                                      .head(1)
-                                      .groupby('level_0')
-                                      .new_colum.prod())
-    else:
-        raise ValueError("Unsupported operation: {}".format(operation))
-    
-    return intersects
-
+    return grid_gdf
 #---------------------------------------------------------------------------------------------------------------------
 
 def Clip_EFG(MPA, path_EFG):
@@ -272,32 +210,74 @@ def Clip_EFG(MPA, path_EFG):
     
     Geometry = []
     
-    if not isinstance(path_EFG, (np.ndarray,list)):
+    if not isinstance(path_EFG, (np.ndarray, list)):
         raise TypeError("Need an array with the paths where the EFG layers are located")
     
-    if isinstance(path_EFG, (np.ndarray,list)):
-        
+    if isinstance(path_EFG, (np.ndarray, list)):
         for x in range(len(path_EFG)):
-            #Reading each EFG
+            # Reading each EFG
             gdf = gpd.read_file(str(path_EFG[x]))
 
-            #Choosing the crs
+            # Choosing the crs
             gdf = gdf.set_crs(epsg=4326, allow_override=True)
 
-            #We want only the polygons within our study place
+            # Attempt to fix self-intersecting geometries
+            gdf['geometry'] = gdf['geometry'].buffer(0)
+
+            # We want only the polygons within our study area
             clip = gpd.clip(gdf, MPA)
             clip = clip.reset_index()
 
-            #Selecting the 'geometry' column
+            # Selecting the 'geometry' column
             geo = clip.geometry
 
             Geometry.append(geo)
 
         joined = gpd.GeoDataFrame(pd.concat(Geometry, ignore_index=True))
-    
+
     return joined
 
 #---------------------------------------------------------------------------------------------------------------------
+def generate_random_values(mean=0, std_deviation=0.1, num_samples=100):
+    random_values = np.random.normal(0, 0.1, num_samples)
+    return random_values
+#---------------------------------------------------------------------------------------------------------------------
+def random_changes(column):
+    num_samples = len(column)
+
+    random_values = generate_random_values(0, 0.1, num_samples)
+
+    # Add random values to the existing array
+    result = column + random_values
+
+    # Clip the result to ensure it's within the [0, 1] range
+    result = np.clip(result, 0, 1)
+
+    return result
+#---------------------------------------------------------------------------------------------------------------------
+def assign_credit_y1(row):
+    baseline = row["baseline"]
+    year_value = row[year]
+        
+    if (baseline * 0.95 <= year_value <= baseline * 1.05):
+        return 1
+    elif year_value > baseline * 1.05:
+        return 1
+    else:
+        return 0
+
+#---------------------------------------------------------------------------------------------------------------------
+def assign_credit_ys(row):
+    baseline = row["baseline"]
+    year_value = row[year]
+        
+    if (baseline * 0.95 <= year_value <= baseline * 1.05):
+        return 1
+    else:
+        return 0
+
+#---------------------------------------------------------------------------------------------------------------------
+
 #Indices and metrics functions
 #---------------------------------------------------------------------------------------------------------------------
 
@@ -348,6 +328,10 @@ def shannon(MPA, gdf, grid_gdf):
     new = new.drop(['geometry'], axis = 1)
         
     merge = new.merge(grid_gdf, how='right', on='Grid_ID')
+    
+    columns_to_keep = ['Grid_ID', 'geometry', 'shannon']
+    merge = merge[columns_to_keep]
+    merge.fillna(0, inplace=True)
         
     grid_gdf = gpd.GeoDataFrame(merge)
     
@@ -409,6 +393,7 @@ def simpson(MPA, gdf, grid_gdf):
     #Merge with the grid_dgf
         
     merge = new.merge(grid_gdf, how='right', on='Grid_ID')
+    merge.fillna(0, inplace=True)
         
     grid_gdf = gpd.GeoDataFrame(merge)
     
@@ -447,6 +432,7 @@ def species_richness(MPA, gdf, grid_gdf):
         grid_gdf['species_richness'] = new['count']
         
         grid_gdf = gpd.GeoDataFrame(grid_gdf)
+        grid_gdf.fillna(0, inplace=True)
 
     elif not isinstance(gdf.geometry[1], shapely.geometry.point.Point):
         
@@ -463,6 +449,7 @@ def species_richness(MPA, gdf, grid_gdf):
 
         # put this into cell
         grid_gdf.loc[dissolve.index,'species_richness'] = dissolve.n_species.values
+        grid_gdf.fillna(0, inplace=True)
     
     return grid_gdf
 
@@ -482,34 +469,26 @@ def endemism(MPA, gdf, grid_gdf):
     gdf <geopandas dataframe>: with an additional column ('endemism') containing the calculation of this factor per grid
                              : or geometry
     """
+    
     #Polygons of species distribution to be clipped to MPA
-    df2 = gpd.clip(gdf.set_crs(epsg=4326, allow_override=True), MPA.set_crs(epsg=4326, allow_override=True))
+    df = gpd.clip(gdf.to_crs(epsg=4326), MPA.to_crs(epsg=4326))
     
     #Calculate the portion of the area covered by each species in MPA with respect to its global distribution
-    dist_ratio2 = np.round(df2.area/gdf.area, decimals=4, out=None)
+    dist_ratio2 = np.round(df.area/gdf.area, decimals=4, out=None)
     
     #Calculate the log of that ratio
     log_dist2 = 1/(-np.log2(dist_ratio2)+0.1)
     
     #Add these values into the new gdf
-    df2["DistRatio2"] = dist_ratio2
-    df2["log_dist2"] = log_dist2
+    df["DistRatio2"] = dist_ratio2
+    df["log_dist2"] = log_dist2
     
     #Function that calculates the sum of the individual log_dist2 values of all species of overlapping geometries
-    overlap_endemic_v = map_algebra(df2, 'log_dist2', 'sum')
+    overlap_endemic_v = algebraic_sum_by_grid(df, grid_gdf, 'log_dist2')
     
-    #Merged the log_dist2 values of overlapping geometries with the grid gdf
-    merged = gpd.sjoin(overlap_endemic_v, grid_gdf, how='left')
-    merged['n_value']= overlap_endemic_v['algebra_overlaps']
-
-    # Compute stats per grid cell
-    #aggfunc: sum the values of all the geometries that dissolve
-    dissolve = merged.dissolve(by="index_right", aggfunc={'n_value': 'sum'})
-
-    #Put this into cell
-    grid_gdf.loc[dissolve.index, 'endemism'] = dissolve.n_value.values
+    overlap_endemic_v.fillna(0, inplace=True)
     
-    return grid_gdf
+    return overlap_endemic_v
  
 #---------------------------------------------------------------------------------------------------------------------
 
@@ -579,10 +558,10 @@ def wege(MPA, gdf, grid_gdf):
         return cat_to_risk.get(cat)
     
     #To extract the MPA area value
-    MPA_area = MPA.area[0]
+    MPA_area = MPA.to_crs(epsg=4326).area[0]
      
     #Polygons of species distribution to be clipped to MPA
-    df = gpd.clip(gdf.set_crs(epsg=4326, allow_override=True), MPA)
+    df = gpd.clip(gdf.set_crs(epsg=4326, allow_override=True), MPA.set_crs(epsg=4326, allow_override=True))
 
     #Calculate the portion of the area covered by each species in MPA with respect to the MPA area
     #This is called "Weighted Endemism" factor
@@ -614,20 +593,11 @@ def wege(MPA, gdf, grid_gdf):
     df['wege_i'] = df['sq_we']*df['ER']
 
     #Function that calculates the sum of the individual wege_i values of all species of overlapping geometries
-    overlap_wege_v = map_algebra(df, 'wege_i', 'sum')
+    overlap_wege_v =algebraic_sum_by_grid(df, grid_gdf, 'wege_i')
 
-    #Merged the log_dist2 values of overlapping geometries with the grid gdf
-    merged = gpd.sjoin(overlap_wege_v, grid_gdf, how='left')
-    merged['n_value']= overlap_wege_v['algebra_overlaps']
-
-    # Compute stats per grid cell
-    #aggfunc: sum the values of all the geometries that dissolve
-    dissolve = merged.dissolve(by="index_right", aggfunc={'n_value': 'sum'})
-
-    #Put this into cell
-    grid_gdf.loc[dissolve.index, 'wege'] = dissolve.n_value.values
+    overlap_wege_v.fillna(0, inplace=True)
     
-    return grid_gdf
+    return overlap_wege_v
     
 #---------------------------------------------------------------------------------------------------------------------    
 
@@ -644,25 +614,13 @@ def habitat_accounting(MPA, grid_gdf, path_EFG):
     gdf <geopandas dataframe>: with an additional column ('habitat_survey') containing the calculation of this factor
                              : per grid or geometry
     """
-    
-    #Join in a gdf all the geometries within ROI
+    # clip the EFG layers within ACMC polygon
     joined = Clip_EFG(MPA, path_EFG)
     
     #Count the number of overlappong geometries from joined gdf
-    overlap_geo = count_overlapping_geometries(joined)
+    overlap_geo = accounting_by_grid(joined, grid_gdf)
     
-    #This is to count how many geometries are in each grid 
-    merged = gpd.sjoin(overlap_geo, grid_gdf, how='left')
-    merged['n_habitats']= overlap_geo['count_intersections']
-
-    # Compute stats per grid cell
-    #aggfunc: select the max value of all the geometries that dissolve
-    dissolve = merged.dissolve(by="index_right", aggfunc={'n_habitats': 'max'})
-
-    # put this into cell
-    grid_gdf.loc[dissolve.index, 'habitat_accounting'] = dissolve.n_habitats.values
-    
-    return grid_gdf
+    return overlap_geo
 
 #---------------------------------------------------------------------------------------------------------------------
 #Modulating Factor Functions
@@ -834,10 +792,7 @@ def mbu_endemism(MPA, gdf, grid_gdf, source):
         df1 = endemism(MPA, gdf, grid_gdf)
 
         #Normalization factor
-        Norm_factor1 = df1['endemism']/df1['endemism'].max()
-
-        #Convert area from degrees to square kilometers
-        #df1['area_sqkm'] = (df1.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+        Norm_factor1 = df1['result']/df1['result'].max()
 
         #Calculate the MBUS from this MF
         df1['mbu_endemism'] = Norm_factor1
@@ -881,10 +836,7 @@ def mbu_wege(MPA, gdf, grid_gdf, source):
         df1 = wege(MPA, gdf, grid_gdf)
 
         #Normalization factor
-        Norm_factor1 = df1['wege']/df1['wege'].max()
-
-        #Convert area from degrees to square kilometers
-        #df1['area_sqkm'] = (df1.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+        Norm_factor1 = df1['result']/df1['result'].max()
 
         #Calculate the MBUS from this MF
         df1['mbu_wege'] = Norm_factor1
@@ -917,102 +869,10 @@ def mbu_habitats_survey(MPA, grid_gdf, path_EFG):
     df1 = habitat_accounting(MPA, grid_gdf, path_EFG)
     
     #Normalization factor
-    Norm_factor1 = df1['habitat_accounting']/df1['habitat_accounting'].max()
-    
-    #Convert area from degrees to square kilometers
-    #df1['area_sqkm'] = (df1.to_crs(crs=crs_transformation_kms).area)*10**(-6)
+    Norm_factor1 = df1['count']/df1['count'].max()
 
     #Calculate the MBUS from this MF
     df1['mbu_habitats_survey'] = Norm_factor1
     
     return df1
-
-#---------------------------------------------------------------------------------------------------------------------
-#General MBU function
-#---------------------------------------------------------------------------------------------------------------------
-
-def weighted_MFs(modulating_factor_names, MPA, gdf, grid_shape, grid_size_deg, path_EFG, source, weights):
-    """
-    input(s):
-    modulating_factor_names: list of names of the modulating factors, e.g. ["species_richness", "habitats_survey"]
-    modulating_factor_names:
-                - shannon_index
-                - simpson_index
-                - species_richness
-                - endemism
-                - wege
-                - habitats_survey
-    MPA <shapely polygon>: region of interest or the total project area
-    gdf <geopandas dataframe>: contains at least the name of the species, their abundance and either
-                             i) the distribution polygons of each of them or (presumbaly from IUCN or local surveys)
-                            ii) points denoting the observations of each species - repeated observations for 
-                                the same species
-    grid_size_deg <int>: size of the grid in degress. Minimum values are enforced
-                       : if grid_size_deg = 0: it means there are no grids
-    grid_shape <str>: either "square" or "hexagonal"
-    path_EFG <list>: consist in a list with path location of each EFG file 
-    source <str>: if the data is from OBIS or from IUCN
-    weights <dic>: it contains the weight values chosen for each modulation factor
-    
-    output(s):
-        gdf <geopandas dataframe>: with an additional columns with the MBUs from each MF chosen and the Total_Number_MBUs 
-                                 : per grid or geometry
-    """
-    if not isinstance(modulating_factor_names, (np.ndarray, list)):
-        print('A list of modulating factors to calculate MBUs is needed')
-    
-    elif isinstance(modulating_factor_names, (np.ndarray, list)):
-        grid = create_grid(MPA, grid_shape, grid_size_deg)
-    
-        if 'shannon_index' in modulating_factor_names:
-            print('Calculating Shannon Index Modulating Factor')
-            if source == 'OBIS':
-                grid['mbu_shannon_index'] = mbu_shannon_index(MPA, gdf, grid, source)['mbu_shannon_index']*(1/weights.get('shannon_index'))
-            elif source == 'IUCN':
-                grid['mbu_shannon_index'] = 0
-                
-        if 'habitats_survey' in modulating_factor_names:
-            print('Calculating Habitats Survey Modulating Factor')
-            if not isinstance(path_EFG, np.ndarray):
-                grid['mbu_habitats_survey'] = 0
-            elif isinstance(path_EFG, np.ndarray):
-                grid['mbu_habitats_survey'] = mbu_habitats_survey(MPA, grid, path_EFG)['mbu_habitats_survey']*(1/weights.get('habitats_survey'))
-                
-        if 'wege' in modulating_factor_names:
-            print('Calculating WEGE Modulating Factor')
-            if source == 'OBIS':
-                grid['mbu_wege'] = 0
-            elif source == 'IUCN':
-                grid['mbu_wege'] = mbu_wege(MPA, gdf, grid, source)['mbu_wege']*(1/weights.get('wege'))
-
-        if 'simpson_index' in modulating_factor_names:
-            print('Calculating Simpson Index Modulating Factor')
-            if source == 'OBIS':
-                grid['mbu_simpson_index'] = mbu_simpson_index(MPA, gdf, grid, source)['mbu_simpson_index']*(1/weights.get('simpson_index'))
-            elif source == 'IUCN':
-                grid['mbu_simpson_index'] = 0
-
-        if 'species_richness' in modulating_factor_names:
-            print('Calculating Species Richness Modulating Factor')
-            grid['mbu_species_richness'] = mbu_species_richness(MPA, gdf, grid)['mbu_species_richness']*(1/weights.get('species_richness'))
-        
-    grid = grid.drop('species_richness', axis=1)
-
-    return grid
-
-def total_mbu(modulating_factor_names, MPA, gdf, grid_shape, grid_size_deg, path_EFG, source, weights, baseline_value):
-    """
-    """
-    grid = weighted_MFs(modulating_factor_names, MPA, gdf, grid_shape, grid_size_deg, path_EFG, source, weights)
-    
-    # filter columns that contain 'mbu' in their name
-    mbu_columns = [col for col in grid.columns if 'mbu' in col]
-
-    # calculate the sum of 'mbu' columns for each row and add as a new column
-    grid['mbu_sum'] = grid[mbu_columns].sum(axis=1)
-
-    # check if each value in 'mbu_sum' is within ±5 of the baseline value
-    grid['result'] = grid['mbu_sum'].apply(lambda x: 1 if abs(x - baseline_value) <= 5 else 0)
-    
-    return grid
     
